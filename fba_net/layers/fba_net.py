@@ -1,0 +1,208 @@
+from collections.abc import Callable
+from dataclasses import InitVar
+from typing import Literal
+
+import equinox as eqx
+import jax
+from einops import rearrange
+from equinox import field, nn
+from jax import nn as jnn
+from jax import numpy as jnp
+from jax import random as jrandom
+from jaxtyping import Array, Float
+
+from fba_net.layers.drop_path import DropPath
+from fba_net.layers.locally_enhanced_feed_forward import LeFFLayer
+from fba_net.layers.multi_layer_perceptron import MLPLayer
+from fba_net.layers.window_attention import WindowAttentionLayer
+
+
+def window_partition(
+    x: Float[Array, "height*window_length width*window_length channels"],
+    window_length: int,
+) -> Float[Array, "height*width window_length*window_length channels"]:
+    return rearrange(
+        x,
+        "(height window_length) (width window_length) channels -> (height width) window_length window_length channels",
+        window_length=window_length,
+    )
+
+
+def window_reverse(
+    windows: Float[Array, "height*width window_length*window_length channels"],
+    height: int,
+    width: int,
+    window_length: int,
+) -> Float[Array, "height*window_length width*window_length channels"]:
+    return rearrange(
+        windows,
+        "(height width) window_length window_length channels -> (height window_length) (width window_length) channels",
+        height=height,
+        width=width,
+        window_length=window_length,
+    )
+
+
+class FBANetLayer(eqx.Module, strict=True, frozen=True, kw_only=True):
+    # Input attributes
+    dim: int
+    input_resolution: tuple[int, int]
+    heads: int
+    key: InitVar[jrandom.KeyArray]
+    window_length: int = 8
+    shift_size: int = 0
+    mlp_ratio: float = 4.0
+    use_qkv_bias: bool = True
+    qk_scale: None | float = None
+    drop_rate: float = 0.0
+    attn_drop_rate: float = 0.0
+    drop_path_rate: float = 0.0
+    activation: Callable[[Float[Array, "..."]], Float[Array, "..."]] = jnn.gelu
+    normalization: None | Callable[[Float[Array, "..."]], Float[Array, "..."]] = None
+    token_projection: Literal["linear", "linear_concat", "conv"] = "linear"
+    token_mlp: Literal["ffn", "leff"] = "leff"
+    use_se_layer: bool = False
+
+    # Computed attributes
+    norm1: nn.LayerNorm = field(init=False)
+    attn: WindowAttentionLayer = field(init=False)
+    drop_path: nn.Identity | nn.Dropout = field(init=False)
+    norm2: nn.LayerNorm = field(init=False)
+    mlp: nn.MLP | LeFFLayer = field(init=False)
+
+    def __post_init__(self, key: jrandom.KeyArray) -> None:
+        if min(self.input_resolution) <= self.window_length:
+            object.__setattr__(self, "shift_size", 0)
+            object.__setattr__(self, "window_length", min(self.input_resolution))
+        assert 0 <= self.shift_size < self.window_length, "shift_size must in 0-window_length"
+
+        object.__setattr__(self, "norm1", nn.LayerNorm(self.dim) if self.normalization is None else self.normalization)
+        object.__setattr__(
+            self,
+            "attn",
+            WindowAttentionLayer(
+                dim=self.dim,
+                window_length=self.window_length,
+                heads=self.heads,
+                use_qkv_bias=self.use_qkv_bias,
+                qk_scale=self.qk_scale,
+                attn_drop_rate=self.attn_drop_rate,
+                proj_drop_rate=self.drop_rate,
+                token_projection=self.token_projection,
+                use_se_layer=self.use_se_layer,
+                key=key,
+            ),
+        )
+        object.__setattr__(
+            self, "drop_path", DropPath(self.drop_path_rate) if self.drop_path_rate > 0.0 else nn.Identity()
+        )
+        object.__setattr__(self, "norm2", nn.LayerNorm(self.dim) if self.normalization is None else self.normalization)
+
+        mlp_hidden_dim = int(self.dim * self.mlp_ratio)
+        object.__setattr__(
+            self,
+            "mlp",
+            MLPLayer(
+                in_size=self.dim,
+                width_size=mlp_hidden_dim,
+                drop_rate=self.drop_rate,
+                activation=self.activation,
+                key=key,
+            )
+            if self.token_mlp == "ffn"
+            else LeFFLayer(dim=self.dim, hidden_dim=mlp_hidden_dim, activation=self.activation, key=key),
+        )
+
+    def __call__(self, x: Float[Array, "length*length channels"]) -> Float[Array, "length*length channels"]:
+        height, width = self.input_resolution
+        length_sq, channels = x.shape
+        assert length_sq == height * width, "input feature has wrong size"
+
+        # attn_mask is not None when self.shift_size > 0.
+        attn_mask: None | Float[Array, "..."] = None
+
+        if self.shift_size > 0:
+            # calculate attention mask for SW-MSA
+            shift_mask = jnp.zeros((height, width, 1))
+            h_slices = (
+                slice(0, -self.window_length),
+                slice(-self.window_length, -self.shift_size),
+                slice(-self.shift_size, None),
+            )
+            w_slices = (
+                slice(0, -self.window_length),
+                slice(-self.window_length, -self.shift_size),
+                slice(-self.shift_size, None),
+            )
+            cnt = 0
+            for h in h_slices:
+                for w in w_slices:
+                    indices_h, indices_w = jnp.ogrid[h, w]
+                    cnt_mask = jnp.full((len(indices_h), len(indices_w), 1), cnt)
+                    mask_update = jnp.where(jnp.zeros_like(shift_mask[h, w, :]) == 0, cnt_mask, 0)
+                    shift_mask += mask_update  # This is not in-place due to immutability of jnp arrays
+                    cnt += 1
+            shift_attn_mask = rearrange(
+                window_partition(shift_mask, self.window_length),
+                "num_windows window_length window_length 1 -> num_windows (window_length window_length)",
+                window_length=self.window_length,
+            )
+            shift_attn_mask = jnp.expand_dims(shift_attn_mask, 1) - jnp.expand_dims(shift_attn_mask, 2)
+            shift_attn_mask = jax.lax.select(
+                shift_attn_mask != 0,
+                jnp.full(shift_attn_mask.shape, float(-100.0)),
+                jnp.full(shift_attn_mask.shape, float(0.0)),
+            )
+            attn_mask = attn_mask + shift_attn_mask if attn_mask is not None else shift_attn_mask
+
+        shortcut = x
+        x = self.norm1(x)
+        x = rearrange(
+            x,
+            "(height width) channels -> height width channels",
+            height=height,
+            width=width,
+            channels=channels,
+        )
+
+        # cyclic shift
+        if self.shift_size > 0:
+            shifted_x = jnp.roll(x, shift=(-self.shift_size, -self.shift_size), axis=(0, 1))
+        else:
+            shifted_x = x
+
+        # partition windows
+        x_windows = rearrange(
+            window_partition(shifted_x, window_length=self.window_length),  # nW, window_length, window_length, C
+            "num_windows window_length window_length channels -> num_windows (window_length window_length) channels",
+            window_length=self.window_length,
+            channels=channels,
+        )
+
+        # W-MSA/SW-MSA
+        attn_windows = self.attn(x_windows, mask=attn_mask)  # nW, window_length*window_length, C
+
+        # merge windows
+        attn_windows = rearrange(
+            attn_windows,
+            "num_windows (window_length window_length) channels -> num_windows window_length window_length channels",
+            window_length=self.window_length,
+            channels=channels,
+        )
+
+        shifted_x = window_reverse(
+            attn_windows, height=height, width=width, window_length=self.window_length
+        )  # H' W' C
+
+        # reverse cyclic shift
+        if self.shift_size > 0:
+            x = jnp.roll(shifted_x, shift=(self.shift_size, self.shift_size), axis=(0, 1))
+        else:
+            x = shifted_x
+
+        x = rearrange(x, "height width channels -> (height width) channels")
+
+        # FFN
+        x = shortcut + self.drop_path(x)
+        x = x + self.drop_path(self.mlp(self.norm2(x)))
+        return x

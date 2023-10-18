@@ -1,3 +1,10 @@
+# TODO:
+
+- Make all occurrences of `eqx.Module` strict and key-word only.
+- Move to `Key[Array, ""]` in `jaxtyping`.
+- Dimensions are undoubtedly wrong -- started refactoring to channels-last and didn't finish.
+- Reimplement their homography alignment in JAX.
+
 # Towards Real-World Burst Image Super-Resolution: Benchmark and Method 
 This is the official implementation of ICCV2023 "Towards Real-World Burst Image Super-Resolution: Benchmark and Method".
 

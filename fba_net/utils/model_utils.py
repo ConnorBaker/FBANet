@@ -63,16 +63,16 @@ def load_optim(optimizer, weights):
 
 
 def get_arch(opt):
-    from model import BaseModel
+    from fba_net.models.fba_net import FBANetModel
 
     arch = opt.arch
 
     print("You choose " + arch + "...")
     if arch == "BaseModel":
-        model_restoration = BaseModel(
+        model_restoration = FBANetModel(
             img_size=opt.train_ps,
             embed_dim=opt.embed_dim,
-            win_size=opt.win_size,
+            window_length=opt.win_size,
             token_projection=opt.token_projection,
             token_mlp=opt.token_mlp,
         )

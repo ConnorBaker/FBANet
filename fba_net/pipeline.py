@@ -12,6 +12,7 @@ from PIL import Image
 
 from fba_net.optical_flow import compute_optical_flow_image, register_frame
 from fba_net.homography_alignment import register_frame as homography_register_frame
+from fba_net.registration.pyramid import register as pyramid_register_frame
 
 
 @pipeline_def(num_threads=1, device_id=0)
@@ -62,8 +63,16 @@ def compare_registrations(
         print(f"{metric.__name__} optical flow reg. = {metric(reference_frame, optical_flow_registered_frame)}")
 
     # Save the homography-registered frame and run the metrics (they are in the callable)
-    homography_registered_frame: Float[Array, "height width channels"] = homography_register_frame(reference_frame, frame)
+    homography_registered_frame: Float[Array, "height width channels"] = homography_register_frame(
+        reference_frame, frame
+    )
     save_image(homography_registered_frame, registration_path / f"homography_registered_frame_{i}.jpg")
+
+    # Save the pyramid-registered frame and run the metrics (they are in the callable)
+    pyramid_registered_frame: Float[Array, "height width channels"] = pyramid_register_frame(
+        "MapperGradProj", reference_frame, frame
+    )
+    save_image(pyramid_registered_frame, registration_path / f"pyramid_registered_frame_{i}.jpg")
 
 
 def run_pipeline() -> None:

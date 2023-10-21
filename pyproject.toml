@@ -24,7 +24,7 @@ dependencies = [
     "nvidia-cuda-runtime-cu12",
     "Pillow",
     # For homography alignment
-    "opencv-python-headless"
+    "opencv-contrib-python-headless-rolling==5.0.0.20221015"
 ]
 
 [project.optional-dependencies]

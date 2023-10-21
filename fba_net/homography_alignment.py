@@ -1,15 +1,64 @@
+import time
 import multiprocessing
 import os
 
 # from motion_selection import model_select
 from concurrent.futures import ThreadPoolExecutor
-
+import dm_pix
 import cv2
 import numpy as np
+from jax import numpy as jnp
+from jaxtyping import Array, Float
 
 LR_patch_path = "/home/data1/dataset/RealBSR/RGB/train"
 save_path = "/home/data1/dataset/RealBSR/RGB_aligned/train/LR_aligned"
 save_gt_path = "/home/data1/dataset/RealBSR/RGB_aligned/train/GT"
+
+
+def register_frame(
+    img1: Float[Array, "height width 3"],
+    img2: Float[Array, "height width 3"],
+) -> Float[Array, "height width 3"]:
+    start = time.time()
+    img1_np = np.asarray(img1)
+    img2_np = np.asarray(img2)
+    # Specify the number of iterations.
+    number_of_iterations = 100
+
+    # Specify the threshold of the increment
+    # in the correlation coefficient between two iterations
+    termination_eps = 1e-10
+
+    # Termination criteria tuple
+    criteria = (cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, number_of_iterations, termination_eps)
+
+    # Run the ECC algorithm. The results are stored in warpMatrix, which begins as the
+    # identity matrix and is updated by ECC.
+    (cc, warp_matrix) = cv2.findTransformECC(
+        templateImage=cv2.cvtColor(img1_np, cv2.COLOR_BGR2GRAY),
+        inputImage=cv2.cvtColor(img2_np, cv2.COLOR_BGR2GRAY),
+        warpMatrix=np.eye(3, 3, dtype=np.float32),
+        motionType=cv2.MOTION_HOMOGRAPHY,
+        criteria=criteria,
+    )
+
+    # Use warpPerspective for Homography
+    img2_aligned: Float[Array, "height width 3"] = jnp.asarray(cv2.warpPerspective(
+        src=img2_np,
+        M=warp_matrix,
+        # dsize=(img1.shape[1], img1.shape[0]),
+        dsize=img1.shape[:2][::-1],
+        flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP,
+    ))
+    end = time.time()
+
+    print(f"homography time cost: {end - start}")
+
+    for metric in [dm_pix.psnr, dm_pix.ssim]:
+        print(f"{metric.__name__} homography unreg. = {metric(img1, img2)}")
+        print(f"{metric.__name__} homography reg. = {metric(img1, img2_aligned)}")
+
+    return img2_aligned
 
 
 def process_one_frame(i, im1, LR_patch_path, LR_list, LR_number1, LR_number2, save_LR_path):

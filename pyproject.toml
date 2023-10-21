@@ -10,11 +10,11 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 description = "Towards Real-World Burst Image Super-Resolution: Benchmark and Method"
 dependencies = [
-    "jaxlib[cuda12_pip]@https://storage.googleapis.com/jax-releases/cuda12/jaxlib-0.4.18+cuda12.cudnn89-cp311-cp311-manylinux2014_x86_64.whl",
-    "jax[cuda12_pip]@https://storage.googleapis.com/jax-releases/cuda12/jaxlib-0.4.18+cuda12.cudnn89-cp311-cp311-manylinux2014_x86_64.whl",
-    "jaxtyping@https://github.com/google/jaxtyping/archive/7a84b27da9e57c425ce4e6333121c3cdf2e07302.tar.gz",
-    "equinox@https://github.com/patrick-kidger/equinox/archive/5d8a06e5e931295d9fef70f240a33a7061a1b350.tar.gz",
-    "optax@https://github.com/google-deepmind/optax/archive/9f2f5caeca3030accf608cce934182798b5da7c6.tar.gz",
+    "jaxlib[cuda12_pip]@https://storage.googleapis.com/jax-releases/cuda12/jaxlib-0.4.19+cuda12.cudnn89-cp311-cp311-manylinux2014_x86_64.whl",
+    "jax[cuda12_pip]@https://storage.googleapis.com/jax-releases/cuda12/jaxlib-0.4.19+cuda12.cudnn89-cp311-cp311-manylinux2014_x86_64.whl",
+    "jaxtyping@https://github.com/google/jaxtyping/archive/7f85a12a85afdba03ba146b1f62b71100d2f936c.tar.gz",
+    "equinox@https://github.com/patrick-kidger/equinox/archive/459941d3d5da293165f94928d984ab8020dd9837.tar.gz",
+    "optax@https://github.com/google-deepmind/optax/archive/2dc4e1b6eef8c4059259e62fdfbeb4b361ac44b4.tar.gz",
     "dm-pix@https://github.com/google-deepmind/dm_pix/archive/14ec005685c4933420939010e774afde20c9140a.tar.gz",
     "einops@https://github.com/arogozhnikov/einops/archive/a6e93530ec2dce44f473e6065fad4d8236cda4f3.tar.gz",
     # For DALI
@@ -22,7 +22,9 @@ dependencies = [
     "nvidia-nvjpeg-cu12",
     "nvidia-npp-cu12",
     "nvidia-cuda-runtime-cu12",
-    "Pillow"
+    "Pillow",
+    # For homography alignment
+    "opencv-python-headless"
 ]
 
 [project.optional-dependencies]

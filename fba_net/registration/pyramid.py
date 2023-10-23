@@ -88,25 +88,3 @@ def register(
         print(f"{metric.__name__} pyramid {mapper_name} reg. = {metric(float_reference, float_registered_frame)}")
 
     return registered_frame
-
-
-if __name__ == "__main__":
-    from PIL import Image
-
-    img1 = Image.open("/home/connorbaker/FBANet/data/sintel-2k-png/00002590.png")
-    img2 = Image.open("/home/connorbaker/FBANet/data/sintel-2k-png/00002591.png")
-
-    img1 = np.asarray(img1)
-    img2 = np.asarray(img2)
-
-    print(f"img1 shape = {img1.shape}")
-    print(f"img1 dtype = {img1.dtype}")
-    print(f"img2 shape = {img2.shape}")
-    print(f"img2 dtype = {img2.dtype}")
-
-    img1 = jnp.asarray(img1)
-    img2 = jnp.asarray(img2)
-
-    registered_frame = register("MapperGradProj", img1, img2)
-    print(f"registered_frame shape = {registered_frame.shape}")
-    print(f"registered_frame dtype = {registered_frame.dtype}")

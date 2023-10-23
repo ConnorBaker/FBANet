@@ -6,34 +6,34 @@ import jax.random as jrandom
 from jaxtyping import Array
 
 
-class DropPath(eqx.Module):
+class DropPath(eqx.Module, strict=True, frozen=True, kw_only=True):
     """Effectively dropping a sample from the call.
     Often used inside a network along side a residual connection.
     Equivalent to `torchvision.stochastic_depth`."""
 
-    p: float
-    inference: bool
-    mode: str
+    p: float = 0.0
+    """
+    The probability to drop a sample entirely during forward pass.
+    Defaults to `0.0`.
+    """
 
-    def __init__(self, p: float = 0.0, inference: bool = False, mode="global"):
-        """**Arguments:**
+    inference: bool = False
+    """
+    Defaults to `False`. If `True`, then the input is returned unchanged.
+    This may be toggled with `equinox.tree_inference`.
+    """
 
-        - `p`: The probability to drop a sample entirely during forward pass
-        - `inference`: Defaults to `False`. If `True`, then the input is returned unchanged
-        This may be toggled with `equinox.tree_inference`
-        - `mode`: Can be set to `global` or `local`. If `global`, the whole input is dropped or retained.
-                If `local`, then the decision on each input unit is computed independently. Defaults to `global`
+    mode: str = "global"
+    """
+    Can be set to `global` or `local`. If `global`, the whole input is dropped or retained.
+    If `local`, then the decision on each input unit is computed independently. Defaults to `global`.
 
-        !!! note
+    !!! note
 
             For `mode = local`, an input `(channels, dim_0, dim_1, ...)` is reshaped and transposed to
             `(channels, dims).transpose()`. For each `dim x channels` element,
             the decision to drop/keep is made independently.
-
-        """
-        self.p = p
-        self.inference = inference
-        self.mode = mode
+    """
 
     def __call__(self, x, *, key: "jax.random.PRNGKey") -> Array:
         """**Arguments:**

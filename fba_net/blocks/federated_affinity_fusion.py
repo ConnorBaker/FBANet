@@ -105,7 +105,7 @@ class FAFBlock(eqx.Module, strict=True, frozen=True, kw_only=True):
 
         assert len(keys) == 0, "All keys should be used"
 
-    def forward(
+    def __call__(
         self, aligned_feat: Float[Array, "num_frames height width channels"]
     ) -> Float[Array, "height width channels"]:
         num_frames, height, width, channels = aligned_feat.shape

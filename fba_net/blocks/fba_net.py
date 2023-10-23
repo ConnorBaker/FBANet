@@ -69,5 +69,5 @@ class FBANetBlock(eqx.Module, strict=True, frozen=True, kw_only=True):
         )
         assert len(keys) == 0, "Failed to pop all keys"
 
-    def forward(self, x: Float[Array, "height width channels"]) -> Float[Array, "height width channels"]:
+    def __call__(self, x: Float[Array, "height width channels"]) -> Float[Array, "height width channels"]:
         return self.body(x)

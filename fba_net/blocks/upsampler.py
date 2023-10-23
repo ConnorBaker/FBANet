@@ -29,11 +29,7 @@ class UpsamplerBlock(eqx.Module, strict=True, frozen=True, kw_only=True):
                 list(
                     chain.from_iterable(
                         (
-                            Conv2dLayer(
-                                in_channels=self.num_feats,
-                                out_channels=4 * self.num_feats,
-                                key=keys.pop()
-                            ),
+                            Conv2dLayer(in_channels=self.num_feats, out_channels=4 * self.num_feats, key=keys.pop()),
                             nn.Lambda(PixelShuffleLayer(2)),
                         )
                         for _ in range(self.scale_pow_two)

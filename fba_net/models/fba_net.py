@@ -9,8 +9,9 @@ from dataclasses import InitVar
 from typing import Literal, TypedDict
 
 import equinox as eqx
-from equinox import nn, field
-from jax import random as jrandom, numpy as jnp
+from equinox import field, nn
+from jax import numpy as jnp
+from jax import random as jrandom
 from jaxtyping import Array, Float
 
 from ..blocks.fba_net import FBANetBlock
@@ -177,7 +178,7 @@ class FBANetModel(eqx.Module, strict=True, frozen=True, kw_only=True):
                 input_resolution=(self.img_size, self.img_size),
                 depth=self.depths[0],
                 heads=self.heads[0],
-                drop_path_rate=enc_dpr[sum(self.depths[:0]) : sum(self.depths[:1])],
+                drop_path_rate=enc_dpr[sum(self.depths[:0]): sum(self.depths[:1])],
             ),
         )
         object.__setattr__(
@@ -195,7 +196,7 @@ class FBANetModel(eqx.Module, strict=True, frozen=True, kw_only=True):
                 input_resolution=(self.img_size // 2, self.img_size // 2),
                 depth=self.depths[1],
                 heads=self.heads[1],
-                drop_path_rate=enc_dpr[sum(self.depths[:1]) : sum(self.depths[:2])],
+                drop_path_rate=enc_dpr[sum(self.depths[:1]): sum(self.depths[:2])],
             ),
         )
 
@@ -254,7 +255,7 @@ class FBANetModel(eqx.Module, strict=True, frozen=True, kw_only=True):
                 input_resolution=(self.img_size, self.img_size),
                 depth=self.depths[6],
                 heads=self.heads[6],
-                drop_path_rate=dec_dpr[sum(self.depths[5:6]) : sum(self.depths[5:7])],
+                drop_path_rate=dec_dpr[sum(self.depths[5:6]): sum(self.depths[5:7])],
             ),
         )
 
@@ -270,7 +271,7 @@ class FBANetModel(eqx.Module, strict=True, frozen=True, kw_only=True):
                 input_resolution=(self.img_size, self.img_size),
                 depth=self.depths[0],
                 heads=self.heads[0],
-                drop_path_rate=enc_dpr[sum(self.depths[:0]) : sum(self.depths[:1])],
+                drop_path_rate=enc_dpr[sum(self.depths[:0]): sum(self.depths[:1])],
             ),
         )
         object.__setattr__(
@@ -288,7 +289,7 @@ class FBANetModel(eqx.Module, strict=True, frozen=True, kw_only=True):
                 input_resolution=(self.img_size // 2, self.img_size // 2),
                 depth=self.depths[1],
                 heads=self.heads[1],
-                drop_path_rate=enc_dpr[sum(self.depths[:1]) : sum(self.depths[:2])],
+                drop_path_rate=enc_dpr[sum(self.depths[:1]): sum(self.depths[:2])],
             ),
         )
         object.__setattr__(
@@ -346,7 +347,7 @@ class FBANetModel(eqx.Module, strict=True, frozen=True, kw_only=True):
                 input_resolution=(self.img_size, self.img_size),
                 depth=self.depths[6],
                 heads=self.heads[6],
-                drop_path_rate=dec_dpr[sum(self.depths[5:6]) : sum(self.depths[5:7])],
+                drop_path_rate=dec_dpr[sum(self.depths[5:6]): sum(self.depths[5:7])],
             ),
         )
 

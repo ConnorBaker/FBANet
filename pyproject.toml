@@ -12,13 +12,14 @@ description = "Towards Real-World Burst Image Super-Resolution: Benchmark and Me
 dependencies = [
     "jaxlib[cuda12_pip]@https://storage.googleapis.com/jax-releases/cuda12/jaxlib-0.4.19+cuda12.cudnn89-cp311-cp311-manylinux2014_x86_64.whl",
     "jax[cuda12_pip]@https://storage.googleapis.com/jax-releases/cuda12/jaxlib-0.4.19+cuda12.cudnn89-cp311-cp311-manylinux2014_x86_64.whl",
-    "jaxtyping@https://github.com/google/jaxtyping/archive/7f85a12a85afdba03ba146b1f62b71100d2f936c.tar.gz",
-    "equinox@https://github.com/patrick-kidger/equinox/archive/459941d3d5da293165f94928d984ab8020dd9837.tar.gz",
-    "optax@https://github.com/google-deepmind/optax/archive/2dc4e1b6eef8c4059259e62fdfbeb4b361ac44b4.tar.gz",
+    # Using a PR 143 for jaxtyping: https://github.com/google/jaxtyping/pull/143
+    "jaxtyping@https://github.com/google/jaxtyping/archive/e066118b070dfe22833c4ae2c240a8f4201d620d.tar.gz",
+    "equinox@https://github.com/patrick-kidger/equinox/archive/48a27f91ce230d1f5a756a10be9c4f9530f36222.tar.gz",
+    "optax@https://github.com/google-deepmind/optax/archive/6e7b3a4f78068852609a15fa55de3a20335c5254.tar.gz",
     "dm-pix@https://github.com/google-deepmind/dm_pix/archive/14ec005685c4933420939010e774afde20c9140a.tar.gz",
     "einops@https://github.com/arogozhnikov/einops/archive/a6e93530ec2dce44f473e6065fad4d8236cda4f3.tar.gz",
     # For DALI
-    "nvidia-dali-cuda120@https://developer.download.nvidia.com/compute/redist/nvidia-dali-cuda120/nvidia_dali_cuda120-1.30.0-9783408-py3-none-manylinux2014_x86_64.whl",
+    "nvidia-dali-cuda120@https://developer.download.nvidia.com/compute/redist/nvidia-dali-cuda120/nvidia_dali_cuda120-1.31.0-10168359-py3-none-manylinux2014_x86_64.whl",
     "nvidia-nvjpeg-cu12",
     "nvidia-npp-cu12",
     "nvidia-cuda-runtime-cu12",
@@ -29,12 +30,8 @@ dependencies = [
 
 [project.optional-dependencies]
 notebook = ["jupyterlab"]
-format = ["black", "ruff"]
+format = ["ruff"]
 type = ["beartype", "typing-extensions"]
-
-[tool.black]
-line-length = 120
-target-version = ['py312']
 
 [tool.ruff]
 preview = true
@@ -49,11 +46,27 @@ line-length = 120
 
 [tool.pyright]
 include = ["./fba_net"]
-pythonVersion = "3.11"
+pythonVersion = "3.12"
 pythonPlatform = "Linux"
 typeCheckingMode = "strict"
 useLibraryCodeForTypes = true
-reportUnknownMemberType = false
-reportUnknownVariableType = false
-reportUnknownParameterType = false
-reportUnknownArgumentType = false
+
+# Disable reporting of unknown types
+reportUnknownMemberType = true
+reportUnknownVariableType = true
+reportUnknownParameterType = true
+reportUnknownArgumentType = true
+reportUnknownLambdaType = true
+
+# Misc
+deprecateTypingAliases = true
+reportCallInDefaultInitializer = true
+reportImplicitOverride = true
+reportImplicitStringConcatenation = true
+reportImportCycles = true
+reportMissingSuperCall = true
+reportPropertyTypeMismatch = true
+reportShadowedImports = true
+reportUninitializedInstanceVariable = true
+reportUnnecessaryTypeIgnoreComment = true
+reportUnusedCallResult = true

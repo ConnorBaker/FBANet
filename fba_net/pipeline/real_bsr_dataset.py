@@ -3,23 +3,31 @@ from collections.abc import Sequence
 from dataclasses import dataclass, field
 from functools import cache
 from pathlib import Path
-from typing import ClassVar
+from typing import ClassVar, TypedDict, final
 
 import numpy as np
+from jaxtyping import Array, Float, UInt8
 from numpy import typing as npt
 from nvidia.dali.types import SampleInfo  # type: ignore
 
 
+class RealBSRData(TypedDict):
+    hr_frame: UInt8[Array, "batch height width channel"]
+    lr_frames: UInt8[Array, "batch frame height width channel"]
+    flows: Float[Array, "batch frame-1 height width 2"]
+    lr_frames_unregistered: UInt8[Array, "batch frame height width channel"]
+
+
+@final
 @dataclass(slots=True, frozen=True, eq=True, kw_only=True)
 class RealBSRDataset:
     # Variables set by the user
     data_dir: Path
     seed: int
-    num_frames: int = 14
-    """The length of the sequence returned is num_frames + 1, where the first frame is the HR frame"""
-    batch_size: int = 1
-    shard_id: int = 0
-    num_shards: int = 1
+    num_frames: int
+    batch_size: int
+    shard_id: int
+    num_shards: int
 
     # Variables set during initialization
     shard_size: int = field(init=False)
@@ -115,3 +123,18 @@ class RealBSRDataset:
 
         sample_idx: int = self.get_index(sample_info.epoch_idx, sample_info.idx_in_epoch)
         return self[sample_idx]
+
+
+@final
+@dataclass(frozen=True, slots=True, eq=True)
+class RealBSRDatasetKwargs:
+    data_dir: Path
+    seed: int
+    num_frames: int = 14
+    """The length of the sequence returned is num_frames + 1, where the first frame is the HR frame"""
+    batch_size: int = 1
+    shard_id: int = 0
+    num_shards: int = 1
+
+    def create_dataset(self) -> RealBSRDataset:
+        return RealBSRDataset(**{key: self.__getattribute__(key) for key in self.__slots__})

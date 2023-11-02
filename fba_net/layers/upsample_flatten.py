@@ -1,12 +1,12 @@
 from equinox import nn
-from jax import random as jrandom
+
+from .conv2d_transpose import ConvTranspose2dLayer
 
 
-def UpsampleFlattenLayer(in_channels: int, out_channels: int, key: jrandom.KeyArray) -> nn.ConvTranspose2d:
-    return nn.ConvTranspose2d(
+def UpsampleFlattenLayer(in_channels: int, out_channels: int) -> nn.ConvTranspose2d:
+    return ConvTranspose2dLayer(
         in_channels=in_channels,
         out_channels=out_channels,
         kernel_size=2,
         stride=2,
-        key=key,
     )

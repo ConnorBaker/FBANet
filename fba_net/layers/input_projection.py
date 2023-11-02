@@ -5,17 +5,15 @@ from functools import partial
 import equinox as eqx
 from einops import rearrange
 from equinox import field, nn
-from jax import random as jrandom
 from jaxtyping import Array, Float
 
 from .conv2d import Conv2dLayer
 
 
-class InputProjLayer(eqx.Module, strict=True, frozen=True, kw_only=True):
+class InputProjLayer(eqx.Module, strict=True, kw_only=True):
     # Input attributes
     in_channels: int
     out_channels: int
-    key: InitVar[jrandom.KeyArray]
     kernel_size: int = 3
     stride: int = 1
     normalization: InitVar[None | Callable[[Float[Array, "..."]], Float[Array, "..."]]] = None
@@ -26,31 +24,25 @@ class InputProjLayer(eqx.Module, strict=True, frozen=True, kw_only=True):
 
     def __post_init__(
         self,
-        key: jrandom.KeyArray,
         normalization: None | Callable[[Float[Array, "..."]], Float[Array, "..."]],
         activation: None | Callable[[Float[Array, "..."]], Float[Array, "..."]],
     ) -> None:
-        object.__setattr__(
-            self,
-            "body",
-            nn.Sequential(
-                [
-                    # Projection
-                    Conv2dLayer(
-                        in_channels=self.in_channels,
-                        out_channels=self.out_channels,
-                        kernel_size=self.kernel_size,
-                        stride=self.stride,
-                        padding=self.kernel_size // 2,
-                        key=key,
-                    ),
-                    nn.PReLU() if activation is None else activation,
-                    # Rearrange
-                    nn.Lambda(partial(rearrange, pattern="height width channels-> (height width) channels")),
-                    # Normalization
-                    nn.Identity() if normalization is None else normalization,
-                ]
-            ),
+        self.body = nn.Sequential(
+            [
+                # Projection
+                Conv2dLayer(
+                    in_channels=self.in_channels,
+                    out_channels=self.out_channels,
+                    kernel_size=self.kernel_size,
+                    stride=self.stride,
+                    padding=self.kernel_size // 2,
+                ),
+                nn.PReLU() if activation is None else activation,
+                # Rearrange
+                nn.Lambda(partial(rearrange, pattern="height width channels-> (height width) channels")),
+                # Normalization
+                nn.Identity() if normalization is None else normalization,
+            ]
         )
 
     # TODO: Need to change callsites to make sure channels are last

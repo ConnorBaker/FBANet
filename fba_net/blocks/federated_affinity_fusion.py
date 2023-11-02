@@ -1,11 +1,10 @@
-from dataclasses import InitVar
+from collections.abc import Sequence
 
 import equinox as eqx
 import jax
 from einops import repeat
 from equinox import field, nn
 from jax import numpy as jnp
-from jax import random as jrandom
 from jaxtyping import Array, Float
 
 from fba_net.layers.conv2d import Conv2dLayer
@@ -15,146 +14,127 @@ from fba_net.layers.upsample_flatten import UpsampleFlattenLayer
 from .residual import ResBlock
 
 
-class FAFBlock(eqx.Module, strict=True, frozen=True, kw_only=True):
+class FAFBlock(eqx.Module, strict=True, kw_only=True):
     # Input attributes
-    key: InitVar[jrandom.KeyArray]
     num_feats: int = 64
     num_frames: int = 14
     center_frame_idx: int = 0
 
     # Computed attributes
+    temporal_attn0: nn.Conv2d = field(init=False)
     temporal_attn1: nn.Conv2d = field(init=False)
-    temporal_attn2: nn.Conv2d = field(init=False)
-    feat_fusion: nn.Conv2d = field(init=False)
+    feature_fusion: nn.Sequential = field(init=False)
+    downsample0: nn.Conv2d = field(init=False)
     downsample1: nn.Conv2d = field(init=False)
-    downsample2: nn.Conv2d = field(init=False)
+    upsample0: nn.ConvTranspose2d = field(init=False)
     upsample1: nn.ConvTranspose2d = field(init=False)
-    upsample2: nn.ConvTranspose2d = field(init=False)
-    res_block1: nn.Sequential = field(init=False)
-    res_block2: nn.Sequential = field(init=False)
-    res_block3: nn.Sequential = field(init=False)
-    res_block4: nn.Sequential = field(init=False)
-    res_block5: nn.Sequential = field(init=False)
+    res_blocks: Sequence[nn.Sequential] = field(init=False)
     fusion_tail: nn.Conv2d = field(init=False)
     lrelu: nn.PReLU = field(init=False)
 
-    def __post_init__(self, key: jrandom.KeyArray) -> None:
-        """
-        # Compuate the attention map, highlight distinctions while keep similarities
-
-        Input: Aligned frames, [T, C, H, W]
-        Output: Fused frame, [C, H, W]
-        """
-        keys = list(jrandom.split(key, 18))
-
-        object.__setattr__(
-            self,
-            "temporal_attn1",
-            Conv2dLayer(in_channels=self.num_feats, out_channels=self.num_feats, padding=1, key=keys.pop()),
-        )
-        object.__setattr__(
-            self,
-            "temporal_attn2",
-            Conv2dLayer(in_channels=self.num_feats, out_channels=self.num_feats, padding=1, key=keys.pop()),
-        )
-        object.__setattr__(
-            self,
-            "feat_fusion",
-            Conv2dLayer(
-                in_channels=self.num_feats * self.num_frames, out_channels=self.num_feats, kernel_size=1, key=keys.pop()
-            ),
-        )
-
+    def __post_init__(self) -> None:
         # spatial attention
-        object.__setattr__(
-            self,
-            "downsample1",
-            DownsampleFlattenLayer(in_channels=self.num_feats, out_channels=self.num_feats * 2, key=keys.pop()),
-        )
-        object.__setattr__(
-            self,
-            "downsample2",
-            DownsampleFlattenLayer(in_channels=self.num_feats * 2, out_channels=self.num_feats * 4, key=keys.pop()),
-        )
+        self.temporal_attn0 = Conv2dLayer(in_channels=self.num_feats, out_channels=self.num_feats, padding=1)
+        self.temporal_attn1 = Conv2dLayer(in_channels=self.num_feats, out_channels=self.num_feats, padding=1)
 
-        object.__setattr__(
-            self,
-            "upsample1",
-            UpsampleFlattenLayer(in_channels=self.num_feats * 4, out_channels=self.num_feats * 2, key=keys.pop()),
-        )
-        object.__setattr__(
-            self,
-            "upsample2",
-            UpsampleFlattenLayer(in_channels=self.num_feats * 4, out_channels=self.num_feats, key=keys.pop()),
+        # feature fusion
+        self.feature_fusion: nn.Sequential = nn.Sequential(
+            [
+                Conv2dLayer(
+                    in_channels=self.num_feats * self.num_frames,
+                    out_channels=self.num_feats,
+                    kernel_size=1,
+                ),
+                nn.PReLU(init_alpha=0.1),
+            ]
         )
 
-        # Residual blocks
-        for res_block_idx, feat_multiplier in enumerate([1, 2, 4, 4, 2], start=1):
-            object.__setattr__(
-                self,
-                f"res_block{res_block_idx}",
-                nn.Sequential([ResBlock(num_feats=self.num_feats * feat_multiplier, key=keys.pop()) for _ in range(2)]),
-            )
+        # Top of hour glass, which shrinks
+        self.downsample0 = DownsampleFlattenLayer(in_channels=self.num_feats, out_channels=self.num_feats * 2)
+        self.downsample1 = DownsampleFlattenLayer(in_channels=self.num_feats * 2, out_channels=self.num_feats * 4)
 
-        object.__setattr__(
-            self,
-            "fusion_tail",
-            Conv2dLayer(in_channels=self.num_feats * 2, out_channels=self.num_feats, key=keys.pop()),
-        )
-        object.__setattr__(self, "lrelu", nn.PReLU(init_alpha=0.1))
+        # Bottom of hour glass, which expands
+        self.upsample0 = UpsampleFlattenLayer(in_channels=self.num_feats * 4, out_channels=self.num_feats * 2)
+        self.upsample1 = UpsampleFlattenLayer(in_channels=self.num_feats * 4, out_channels=self.num_feats)
 
-        assert len(keys) == 0, "All keys should be used"
+        # Residual blocks used throughout the hour glass
+        self.res_blocks: Sequence[nn.Sequential] = [
+            nn.Sequential([ResBlock(num_feats=self.num_feats * feat_multiplier) for _ in range(2)])
+            for feat_multiplier in (1, 2, 4, 4, 2)
+        ]
 
-    def __call__(
-        self, aligned_feat: Float[Array, "num_frames height width channels"]
-    ) -> Float[Array, "height width channels"]:
-        num_frames, height, width, channels = aligned_feat.shape
+        # Tail of the hour glass
+        self.fusion_tail = Conv2dLayer(in_channels=self.num_feats * 2, out_channels=self.num_feats)
+
+    def compute_guided_aligned_features(self, aligned_frames: Float[Array, "F H W C"]) -> Float[Array, "F H W C"]:
+        """
+        Compute the attention map, highlight distinctions while keep similarities, using them to
+        align the features in the aligned frames.
+
+        Input: Aligned frames, [F, H, W, C]
+        Output: Aligned features, [F, H, W, C]
+        """
+        frames, height, width, channels = aligned_frames.shape
+        assert frames == self.num_frames, f"Expected {self.num_frames} frames, got {frames}"
 
         # attention map, highlight distinctions while keep similarities
-        type Embedding = Float[Array, f"{height} {width} {channels}"]
-        type Embeddings = Float[Array, f"{num_frames} {height} {width} {channels}"]
-        embedding_ref: Embedding = self.temporal_attn1(aligned_feat[self.center_frame_idx])
-        embeddings: Embeddings = self.temporal_attn2(aligned_feat)
+        embedding_ref: Float[Array, "H W C"] = self.temporal_attn0(aligned_frames[self.center_frame_idx])
+        embeddings: Float[Array, "F H W C"] = self.temporal_attn1(aligned_frames)
 
-        type Correlation = Float[Array, f"{height} {width} 1"]
-        corr_l: list[Correlation] = [
+        affinity_map: list[Float[Array, "H W 1"]] = [
             (embedding - embedding_ref).sum(axis=-1, keepdims=True) for embedding in embeddings
         ]
-        corr_diff: list[Correlation] = [jnp.abs(corr - corr_l[0]) for corr in corr_l[1:]]
+        affinity_map_diffs: list[Float[Array, "H W 1"]] = [jnp.abs(corr - affinity_map[0]) for corr in affinity_map[1:]]
 
         # compute the attention map
-        type AlignedFeats = Embeddings
-        type AlignedOtherFeats = Float[Array, f"{num_frames - 1} {height} {width} {channels}"]
-        corr_prob_repeat: AlignedOtherFeats = repeat(
-            jax.nn.sigmoid(jnp.concatenate(corr_diff)),
-            "num_frames height width -> num_frames height width channels",
-            height=height,
-            width=width,
-            num_frames=num_frames - 1,
-            channels=channels,
+        guide_weights: Float[Array, "F-1 H W C"] = repeat(
+            jax.nn.sigmoid(jnp.concatenate(affinity_map_diffs)),
+            "f h w -> f h w c",
+            h=height,
+            w=width,
+            f=frames - 1,
+            c=channels,
+        )
+        guided_aligned_features: Float[Array, "F H W C"] = jnp.concatenate(
+            [aligned_frames[0:1], aligned_frames[1:] * guide_weights]
         )
 
-        aligned_feat_guided: AlignedFeats = jnp.concatenate([aligned_feat[0:1], aligned_feat[1:] * corr_prob_repeat])
+        return guided_aligned_features
 
+    def fuse_features(self, guided_aligned_features: Float[Array, "F H W C"]) -> Float[Array, "H W C"]:
+        """
+        Fuse the aligned features into a single frame.
+
+        Input: Aligned features, [F, H, W, C]
+        Output: Fused frame, [H, W, C]
+        """
         # fuse the feat under the guidance of computed attention map
-        type Feat = Float[Array, f"{height} {width} {channels}"]
-        feat: Feat = self.lrelu(self.feat_fusion(aligned_feat_guided))
+        feat = self.feature_fusion(guided_aligned_features)
 
         # Hourglass for spatial attention
-        feat_res1 = self.res_block1(feat)
-        down_feat1 = self.downsample1(feat_res1)
-        feat_res2 = self.res_block2(down_feat1)
-        down_feat2 = self.downsample2(feat_res2)
+        feat_res: dict[int, Float[Array, "..."]] = {}
 
-        feat3 = self.res_block3(down_feat2)
+        # Top of hour glass, which shrinks
+        feat_res[0] = self.res_blocks[0](feat)
+        feat_res[1] = self.res_blocks[1](self.downsample0(feat_res[0]))
+        feat_res[2] = self.res_blocks[2](self.downsample1(feat_res[1]))
 
-        up_feat3 = self.upsample1(feat3)
-        concat_2_1 = jnp.concatenate([up_feat3, feat_res2], axis=1)
-        feat_res4 = self.res_block4(concat_2_1)
-        up_feat4 = self.upsample2(feat_res4)
-        concat_1_0 = jnp.concatenate([up_feat4, feat_res1], axis=1)
-        feat_res5 = self.res_block5(concat_1_0)
+        # Bottom of hour glass, which expands
+        feat_res[3] = self.res_blocks[3](jnp.concatenate([self.upsample0(feat_res[2]), feat_res[1]], axis=1))
+        feat_res[4] = self.res_blocks[4](jnp.concatenate([self.upsample1(feat_res[3]), feat_res[0]], axis=1))
 
-        feat_out = self.fusion_tail(feat_res5) + feat
+        # Skip connection
+        feat_out = self.fusion_tail(feat_res[4]) + feat
 
         return feat_out
+
+    def __call__(self, aligned_frames: Float[Array, "F H W C"]) -> Float[Array, "H W C"]:
+        """
+        Compute the attention map, highlight distinctions while keep similarities
+
+        Input: Aligned frames, [F, H, W, C]
+        Output: Fused frame, [H, W, C]
+        """
+        guided_aligned_features: Float[Array, "F H W C"] = self.compute_guided_aligned_features(aligned_frames)
+        frame: Float[Array, "H W C"] = self.fuse_features(guided_aligned_features)
+        return frame

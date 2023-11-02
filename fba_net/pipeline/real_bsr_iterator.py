@@ -41,8 +41,8 @@ class DaliKwargs:
 
     def create_iterator(self, dataset: RealBSRDataset) -> Iterator[RealBSRData]:
         return _mk_real_bsr_dali_iterator(  # type: ignore
-        dataset, **{key: self.__getattribute__(key) for key in self.__slots__}
-    )
+            dataset, **{key: self.__getattribute__(key) for key in self.__slots__}
+        )
 
 
 def _01_load_frames(

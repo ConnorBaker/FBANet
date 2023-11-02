@@ -52,11 +52,11 @@ typeCheckingMode = "strict"
 useLibraryCodeForTypes = true
 
 # Disable reporting of unknown types
-reportUnknownMemberType = true
-reportUnknownVariableType = true
-reportUnknownParameterType = true
-reportUnknownArgumentType = true
-reportUnknownLambdaType = true
+reportUnknownMemberType = false
+reportUnknownVariableType = false
+reportUnknownParameterType = false
+reportUnknownArgumentType = false
+reportUnknownLambdaType = false
 
 # Misc
 deprecateTypingAliases = true

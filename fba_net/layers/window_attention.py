@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from dataclasses import InitVar
 from typing import Literal, overload
 
 import equinox as eqx
@@ -11,18 +10,19 @@ from jax import numpy as jnp
 from jax import random as jrandom
 from jaxtyping import Array, Float
 
+from fba_net.keygen import KEYS
+
 from .conv_projection import ConvProjectionLayer
 from .linear_projection import LinearProjectionLayer
 from .linear_projection_concat_kv import LinearProjectionConcatKVLayer
 from .squeeze_and_excitation import SELayer
 
 
-class WindowAttentionLayer(eqx.Module, strict=True, frozen=True, kw_only=True):
+class WindowAttentionLayer(eqx.Module, strict=True, kw_only=True):
     # Input attributes
     dim: int
     window_length: int
     heads: int
-    key: InitVar[jrandom.KeyArray]
     token_projection: Literal["linear", "linear_concat", "conv"] = "linear"
     use_qkv_bias: bool = True
     qk_scale: None | float = None
@@ -48,13 +48,12 @@ class WindowAttentionLayer(eqx.Module, strict=True, frozen=True, kw_only=True):
         window_length: int,
         heads: int,
         *,
-        key: jrandom.KeyArray,
         mean: float = 0.0,
         std: float = 1.0,
     ) -> Float[Array, "(2*window_length-1)*(2*window_length-1) heads"]:
-        type RetType = Float[Array, f"{2*window_length-1}*{2*window_length-1} heads"]
+        type RetType = Float[Array, f"{2 * window_length - 1}*{2 * window_length - 1} heads"]
         relative_position_bias_table: RetType = mean + std * jrandom.truncated_normal(
-            key=key, lower=-2, upper=2, shape=((2 * window_length - 1) * (2 * window_length - 1), heads)
+            key=next(KEYS), lower=-2, upper=2, shape=((2 * window_length - 1) * (2 * window_length - 1), heads)
         )
         return relative_position_bias_table
 
@@ -82,11 +81,9 @@ class WindowAttentionLayer(eqx.Module, strict=True, frozen=True, kw_only=True):
         dim: int,
         heads: int,
         *,
-        key: jrandom.KeyArray,
         use_bias: bool = True,
         token_projection: Literal["linear"] = "linear",
-    ) -> LinearProjectionLayer:
-        ...
+    ) -> LinearProjectionLayer: ...
 
     @overload
     @staticmethod
@@ -94,11 +91,9 @@ class WindowAttentionLayer(eqx.Module, strict=True, frozen=True, kw_only=True):
         dim: int,
         heads: int,
         *,
-        key: jrandom.KeyArray,
         use_bias: bool = True,
         token_projection: Literal["linear_concat"] = "linear_concat",
-    ) -> LinearProjectionConcatKVLayer:
-        ...
+    ) -> LinearProjectionConcatKVLayer: ...
 
     @overload
     @staticmethod
@@ -106,18 +101,15 @@ class WindowAttentionLayer(eqx.Module, strict=True, frozen=True, kw_only=True):
         dim: int,
         heads: int,
         *,
-        key: jrandom.KeyArray,
         use_bias: bool = True,
         token_projection: Literal["conv"] = "conv",
-    ) -> ConvProjectionLayer:
-        ...
+    ) -> ConvProjectionLayer: ...
 
     @staticmethod
     def mk_qkv(
         dim: int,
         heads: int,
         *,
-        key: jrandom.KeyArray,
         use_bias: bool = True,
         token_projection: Literal["linear", "linear_concat", "conv"] = "linear",
     ) -> LinearProjectionLayer | LinearProjectionConcatKVLayer | ConvProjectionLayer:
@@ -129,34 +121,26 @@ class WindowAttentionLayer(eqx.Module, strict=True, frozen=True, kw_only=True):
             case "conv":
                 QkvLayer = ConvProjectionLayer
 
-        return QkvLayer(dim=dim, heads=heads, use_bias=use_bias, key=key)
+        return QkvLayer(dim=dim, heads=heads, use_bias=use_bias)
 
-    def __post_init__(self, key: jrandom.KeyArray) -> None:
-        object.__setattr__(self, "dim_head", self.dim // self.heads)
-        object.__setattr__(self, "scale", self.qk_scale or self.dim_head**-0.5)
-        key1, key2, key3, key4 = jrandom.split(key, 4)
-        object.__setattr__(
-            self,
-            "relative_position_bias_table",
-            self.mk_relative_position_bias_table(self.window_length, self.heads, std=0.02, key=key1),
+    def __post_init__(self) -> None:
+        self.dim_head = self.dim // self.heads
+        self.scale = self.qk_scale or self.dim_head**-0.5
+        self.relative_position_bias_table = self.mk_relative_position_bias_table(
+            self.window_length, self.heads, std=0.02
         )
-        object.__setattr__(self, "relative_position_index", self.mk_relative_position_index(self.window_length))
-        object.__setattr__(
-            self,
-            "qkv",
-            self.mk_qkv(
-                dim=self.dim,
-                heads=self.heads,
-                use_bias=self.use_qkv_bias,
-                token_projection=self.token_projection,
-                key=key2,
-            ),
+        self.relative_position_index = self.mk_relative_position_index(self.window_length)
+        self.qkv = self.mk_qkv(
+            dim=self.dim,
+            heads=self.heads,
+            use_bias=self.use_qkv_bias,
+            token_projection=self.token_projection,
         )
-        object.__setattr__(self, "attn_drop", nn.Dropout(self.attn_drop_rate))
-        object.__setattr__(self, "proj", nn.Linear(self.dim, self.dim, key=key3))
-        object.__setattr__(self, "proj_drop", nn.Dropout(self.proj_drop_rate))
-        object.__setattr__(self, "se", SELayer(channels=self.dim, key=key4) if self.use_se_layer else nn.Identity())
-        object.__setattr__(self, "softmax", jnn.softmax)
+        self.attn_drop = nn.Dropout(self.attn_drop_rate)
+        self.proj = nn.Linear(self.dim, self.dim, key=next(KEYS))
+        self.proj_drop = nn.Dropout(self.proj_drop_rate)
+        self.se = SELayer(channels=self.dim) if self.use_se_layer else nn.Identity()
+        self.softmax = jnn.softmax
 
     def __call__(self, x: Float[Array, "n c"], mask: None | Float[Array, "m n"] = None) -> Float[Array, "n c"]:
         seq_length, channels = x.shape
@@ -172,7 +156,7 @@ class WindowAttentionLayer(eqx.Module, strict=True, frozen=True, kw_only=True):
             heads=self.heads,
         )
 
-        dimension_expansion_factor = attn.shape[-1] // relative_position_bias.shape[-1]
+        dimension_expansion_factor: int = attn.shape[-1] // relative_position_bias.shape[-1]
         relative_position_bias = repeat(
             relative_position_bias,
             "heads window_length channels -> heads window_length (channels d)",
@@ -182,7 +166,7 @@ class WindowAttentionLayer(eqx.Module, strict=True, frozen=True, kw_only=True):
             d=dimension_expansion_factor,
         )
 
-        # Add relative position bias
+        # Add relative position bias, indexing with None to add an extra dimension
         attn = attn + relative_position_bias[None]
 
         if mask is not None:
@@ -218,23 +202,3 @@ class WindowAttentionLayer(eqx.Module, strict=True, frozen=True, kw_only=True):
         # Apply dropout to the projected output
         x_dropped = self.proj_drop(x_se)
         return x_dropped
-
-    def flops(self, H: int, W: int) -> float:
-        # calculate flops for 1 window with token length of N
-        flops = 0.0
-        N = self.window_length**2
-        nW = H * W / N
-        # qkv = self.qkv(x)
-        # flops += N * self.dim * 3 * self.dim
-        flops += self.qkv.flops(H, W)
-        # attn = (q @ k.transpose(-2, -1))
-        flops += (
-            nW * self.heads * N * (self.dim // self.heads) * N * (2 if self.token_projection == "linear_concat" else 1)
-        )
-        #  x = (attn @ v)
-        flops += (
-            nW * self.heads * N * N * (self.dim // self.heads) * (2 if self.token_projection == "linear_concat" else 1)
-        )
-        # x = self.proj(x)
-        flops += nW * N * self.dim * self.dim
-        return flops

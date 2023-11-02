@@ -1,16 +1,14 @@
-from dataclasses import InitVar
-
 import equinox as eqx
 from einops import rearrange
 from equinox import field, nn
-from jax import random as jrandom
 from jaxtyping import Array, Float
 
+from fba_net.keygen import KEYS
 
-class LinearProjectionConcatKVLayer(eqx.Module, strict=True, frozen=True, kw_only=True):
+
+class LinearProjectionConcatKVLayer(eqx.Module, strict=True, kw_only=True):
     # Input attributes
     dim: int
-    key: InitVar[jrandom.KeyArray]
     heads: int = 8
     dropout: float = 0.0
     use_bias: bool = True
@@ -21,12 +19,11 @@ class LinearProjectionConcatKVLayer(eqx.Module, strict=True, frozen=True, kw_onl
     to_qkv: nn.Linear = field(init=False)
     to_kv: nn.Linear = field(init=False)
 
-    def __post_init__(self, key: jrandom.KeyArray) -> None:
-        object.__setattr__(self, "dim_head", self.dim // self.heads)
-        object.__setattr__(self, "inner_dim", self.dim_head * self.heads)
-        key1, key2 = jrandom.split(key)
-        object.__setattr__(self, "to_qkv", nn.Linear(self.dim, self.inner_dim * 3, self.use_bias, key=key1))
-        object.__setattr__(self, "to_kv", nn.Linear(self.dim, self.inner_dim * 2, self.use_bias, key=key2))
+    def __post_init__(self) -> None:
+        self.dim_head = self.dim // self.heads
+        self.inner_dim = self.dim_head * self.heads
+        self.to_qkv = nn.Linear(self.dim, self.inner_dim * 3, self.use_bias, key=next(KEYS))
+        self.to_kv = nn.Linear(self.dim, self.inner_dim * 2, self.use_bias, key=next(KEYS))
 
     def __call__(
         self, x: Float[Array, "n c"]
@@ -43,6 +40,3 @@ class LinearProjectionConcatKVLayer(eqx.Module, strict=True, frozen=True, kw_onl
         k = rearrange([k_d, k_e], "(kv h n d) -> h n (kv d)", kv=2)
         v = rearrange([v_d, v_e], "(kv h n d) -> h n (kv d)", kv=2)
         return q, k, v
-
-    def flops(self, H: int, W: int) -> float:
-        return H * W * self.dim * self.inner_dim * 5

@@ -1,5 +1,4 @@
 from collections.abc import Callable
-from dataclasses import InitVar
 from typing import Literal
 
 import equinox as eqx
@@ -8,7 +7,6 @@ from einops import rearrange
 from equinox import field, nn
 from jax import nn as jnn
 from jax import numpy as jnp
-from jax import random as jrandom
 from jaxtyping import Array, Float
 
 from fba_net.layers.drop_path import DropPath
@@ -43,12 +41,11 @@ def window_reverse(
     )
 
 
-class FBANetLayer(eqx.Module, strict=True, frozen=True, kw_only=True):
+class FBANetLayer(eqx.Module, strict=True, kw_only=True):
     # Input attributes
     dim: int
     input_resolution: tuple[int, int]
     heads: int
-    key: InitVar[jrandom.KeyArray]
     window_length: int = 8
     shift_size: int = 0
     mlp_ratio: float = 4.0
@@ -70,48 +67,46 @@ class FBANetLayer(eqx.Module, strict=True, frozen=True, kw_only=True):
     norm2: nn.LayerNorm = field(init=False)
     mlp: nn.MLP | LeFFLayer = field(init=False)
 
-    def __post_init__(self, key: jrandom.KeyArray) -> None:
+    def __post_init__(self) -> None:
         if min(self.input_resolution) <= self.window_length:
-            object.__setattr__(self, "shift_size", 0)
-            object.__setattr__(self, "window_length", min(self.input_resolution))
+            self.shift_size = 0
+            self.window_length = min(self.input_resolution)
         assert 0 <= self.shift_size < self.window_length, "shift_size must in 0-window_length"
 
-        object.__setattr__(self, "norm1", nn.LayerNorm(self.dim) if self.normalization is None else self.normalization)
-        object.__setattr__(
-            self,
-            "attn",
-            WindowAttentionLayer(
-                dim=self.dim,
-                window_length=self.window_length,
-                heads=self.heads,
-                use_qkv_bias=self.use_qkv_bias,
-                qk_scale=self.qk_scale,
-                attn_drop_rate=self.attn_drop_rate,
-                proj_drop_rate=self.drop_rate,
-                token_projection=self.token_projection,
-                use_se_layer=self.use_se_layer,
-                key=key,
-            ),
+        if self.normalization is None:
+            self.norm1 = nn.LayerNorm(self.dim)
+            self.norm2 = nn.LayerNorm(self.dim)
+        else:
+            self.norm1 = self.normalization  # type: ignore
+            self.norm2 = self.normalization  # type: ignore
+
+        self.attn = WindowAttentionLayer(
+            dim=self.dim,
+            window_length=self.window_length,
+            heads=self.heads,
+            use_qkv_bias=self.use_qkv_bias,
+            qk_scale=self.qk_scale,
+            attn_drop_rate=self.attn_drop_rate,
+            proj_drop_rate=self.drop_rate,
+            token_projection=self.token_projection,
+            use_se_layer=self.use_se_layer,
         )
-        object.__setattr__(
-            self, "drop_path", DropPath(self.drop_path_rate) if self.drop_path_rate > 0.0 else nn.Identity()
-        )
-        object.__setattr__(self, "norm2", nn.LayerNorm(self.dim) if self.normalization is None else self.normalization)
+
+        if self.drop_path_rate <= 0.0:  # noqa: PLR2004
+            self.drop_path = nn.Identity()
+        else:
+            self.drop_path = DropPath(self.drop_path_rate)  # type: ignore
 
         mlp_hidden_dim = int(self.dim * self.mlp_ratio)
-        object.__setattr__(
-            self,
-            "mlp",
-            MLPLayer(
+        if self.token_mlp == "ffn":
+            self.mlp = MLPLayer(
                 in_size=self.dim,
                 width_size=mlp_hidden_dim,
                 drop_rate=self.drop_rate,
                 activation=self.activation,
-                key=key,
             )
-            if self.token_mlp == "ffn"
-            else LeFFLayer(dim=self.dim, hidden_dim=mlp_hidden_dim, activation=self.activation, key=key),
-        )
+        else:
+            self.mlp = LeFFLayer(dim=self.dim, hidden_dim=mlp_hidden_dim, activation=self.activation)
 
     def __call__(self, x: Float[Array, "length*length channels"]) -> Float[Array, "length*length channels"]:
         height, width = self.input_resolution
@@ -155,7 +150,7 @@ class FBANetLayer(eqx.Module, strict=True, frozen=True, kw_only=True):
             )
             attn_mask = attn_mask + shift_attn_mask if attn_mask is not None else shift_attn_mask
 
-        shortcut = x
+        skip_connection = x
         x = self.norm1(x)
         x = rearrange(
             x,
@@ -203,6 +198,6 @@ class FBANetLayer(eqx.Module, strict=True, frozen=True, kw_only=True):
         x = rearrange(x, "height width channels -> (height width) channels")
 
         # FFN
-        x = shortcut + self.drop_path(x)
+        x = skip_connection + self.drop_path(x)
         x = x + self.drop_path(self.mlp(self.norm2(x)))
         return x

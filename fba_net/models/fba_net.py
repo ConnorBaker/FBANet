@@ -138,7 +138,7 @@ class FBANetModel(eqx.Module, strict=True, kw_only=True):
             input_resolution=(self.img_size, self.img_size),
             depth=self.depths[0],
             heads=self.heads[0],
-            drop_path_rate=enc_dpr[sum(self.depths[:0]) : sum(self.depths[:1])],
+            drop_path_rate=enc_dpr[sum(self.depths[:0]): sum(self.depths[:1])],
         )
         self.HG1_downsample_0 = DownsampleLayer(in_channels=self.embed_dim, out_channels=self.embed_dim * 2)
         self.HG1_encoderlayer_1 = FBANetBlock(
@@ -147,7 +147,7 @@ class FBANetModel(eqx.Module, strict=True, kw_only=True):
             input_resolution=(self.img_size // 2, self.img_size // 2),
             depth=self.depths[1],
             heads=self.heads[1],
-            drop_path_rate=enc_dpr[sum(self.depths[:1]) : sum(self.depths[:2])],
+            drop_path_rate=enc_dpr[sum(self.depths[:1]): sum(self.depths[:2])],
         )
 
         self.HG1_downsample_1 = DownsampleLayer(in_channels=self.embed_dim * 2, out_channels=self.embed_dim * 4)
@@ -179,7 +179,7 @@ class FBANetModel(eqx.Module, strict=True, kw_only=True):
             input_resolution=(self.img_size, self.img_size),
             depth=self.depths[6],
             heads=self.heads[6],
-            drop_path_rate=dec_dpr[sum(self.depths[5:6]) : sum(self.depths[5:7])],
+            drop_path_rate=dec_dpr[sum(self.depths[5:6]): sum(self.depths[5:7])],
         )
 
         # HG Block2
@@ -190,7 +190,7 @@ class FBANetModel(eqx.Module, strict=True, kw_only=True):
             input_resolution=(self.img_size, self.img_size),
             depth=self.depths[0],
             heads=self.heads[0],
-            drop_path_rate=enc_dpr[sum(self.depths[:0]) : sum(self.depths[:1])],
+            drop_path_rate=enc_dpr[sum(self.depths[:0]): sum(self.depths[:1])],
         )
         self.HG2_downsample_0 = DownsampleLayer(in_channels=self.embed_dim, out_channels=self.embed_dim * 2)
         self.HG2_encoderlayer_1 = FBANetBlock(
@@ -199,7 +199,7 @@ class FBANetModel(eqx.Module, strict=True, kw_only=True):
             input_resolution=(self.img_size // 2, self.img_size // 2),
             depth=self.depths[1],
             heads=self.heads[1],
-            drop_path_rate=enc_dpr[sum(self.depths[:1]) : sum(self.depths[:2])],
+            drop_path_rate=enc_dpr[sum(self.depths[:1]): sum(self.depths[:2])],
         )
         self.HG2_downsample_1 = DownsampleLayer(in_channels=self.embed_dim * 2, out_channels=self.embed_dim * 4)
 
@@ -230,7 +230,7 @@ class FBANetModel(eqx.Module, strict=True, kw_only=True):
             input_resolution=(self.img_size, self.img_size),
             depth=self.depths[6],
             heads=self.heads[6],
-            drop_path_rate=dec_dpr[sum(self.depths[5:6]) : sum(self.depths[5:7])],
+            drop_path_rate=dec_dpr[sum(self.depths[5:6]): sum(self.depths[5:7])],
         )
 
     #     self.apply(self._init_weights)
@@ -246,24 +246,26 @@ class FBANetModel(eqx.Module, strict=True, kw_only=True):
 
     def forward(self, x: Float[Array, "F H W C"]) -> Float[Array, "H W C"]:
         # Input Multi-Frame Conv
-        b, t, c, h, w = x.shape
+        _t, _h, _w, c = x.shape
         assert c == 3, "In channels should be 3!"
 
-        x_base = x[:, 0, :, :, :]  # [b, c, h, w]
+        x_base = x[0, :, :, :]  # [c, h, w]
 
         # feature extraction of aligned frames
-        x_feat_head = self.head(x.view(-1, c, h, w))  # [b*t, embed_dim, h, w]
-        x_feat_body = self.body(x_feat_head)  # [b*t, embed_dim, h, w]
+        # NOTE: embed_dim was originally after t, before h and w.
+        # Because channels are now last, I've put embed_dim in the same place channels were.
+        x_feat_head = self.head(x)  # [t, h, w, embed_dim]
+        x_feat_body = self.body(x_feat_head)  # [t, h, w, embed_dim]
 
-        feat = x_feat_body.view(b, t, -1, h, w)  # [b, t, embed_dim, h, w]
+        feat = x_feat_body  # [t, h, w, embed_dim]
 
         # fusion of aligned features
-        fusion_feat = self.fusion(feat)  # fusion feat [b, embed_dim, h, w]
+        fusion_feat = self.fusion(feat)  # fusion feat [h, w, embed_dim]
 
-        assert fusion_feat.ndim == 4, "Fusion Feat should be [B,C,H,W]!"
+        assert fusion_feat.ndim == 3, "Fusion Feat should be [H,W,C]!"
 
         # Input Projection
-        y = self.input_proj(fusion_feat)  # B, H*W, C
+        y = self.input_proj(fusion_feat)  # H*W, C
         y = self.pos_drop(y)
 
         # HG1
@@ -302,7 +304,7 @@ class FBANetModel(eqx.Module, strict=True, kw_only=True):
 
         # Decoder
         up0_2 = self.HG2_upsample_0(conv2_2)
-        deconv0_2 = self.output_proj_HG2_0(jnp.concatenate([up0, conv1, up0_2, conv1_2], axis=-1))  # B, H/2*W/2, C*8
+        deconv0_2 = self.output_proj_HG2_0(jnp.concatenate([up0, conv1, up0_2, conv1_2], axis=-1))  # H/2*W/2, C*8
         deconv0_2 = self.HG2_decoderlayer_0(deconv0_2)
 
         up1_2 = self.HG2_upsample_1(deconv0_2)

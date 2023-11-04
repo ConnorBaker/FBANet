@@ -8,7 +8,7 @@ from jaxtyping import Array, Float
 from .upsample_flatten import UpsampleFlattenLayer
 
 
-class UpsampleLayer(eqx.Module, strict=True, kw_only=True):
+class UpsampleLayer(eqx.Module, strict=True):
     # Input attributes
     in_channels: int
     out_channels: int

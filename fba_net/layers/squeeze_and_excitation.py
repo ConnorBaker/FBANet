@@ -6,8 +6,10 @@ from equinox import field, nn
 from jax import nn as jnn
 from jaxtyping import Array, Float
 
+from fba_net.keygen import KEYS
 
-class SELayer(eqx.Module, strict=True, kw_only=True):
+
+class SELayer(eqx.Module, strict=True):
     channels: int
     reduction: int = 16
     body: nn.Sequential = field(init=False)
@@ -18,9 +20,9 @@ class SELayer(eqx.Module, strict=True, kw_only=True):
                 # Squeeze step using average pooling
                 nn.Lambda(partial(reduce, pattern="h w c -> c", reduction="mean")),
                 # Excitation step
-                nn.Linear(self.channels, self.channels // self.reduction, use_bias=False, key=key1),
+                nn.Linear(self.channels, self.channels // self.reduction, use_bias=False, key=next(KEYS)),
                 nn.Lambda(jnn.relu),
-                nn.Linear(self.channels // self.reduction, self.channels, use_bias=False, key=key2),
+                nn.Linear(self.channels // self.reduction, self.channels, use_bias=False, key=next(KEYS)),
                 nn.Lambda(jnn.sigmoid),
                 nn.Lambda(partial(rearrange, pattern="c -> c () ()")),
             ]

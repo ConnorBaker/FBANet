@@ -19,7 +19,7 @@ class RealBSRData(TypedDict):
 
 
 @final
-@dataclass(slots=True, frozen=True, eq=True, kw_only=True)
+@dataclass(slots=True, frozen=True, eq=True)
 class RealBSRDataset:
     # Variables set by the user
     data_dir: Path

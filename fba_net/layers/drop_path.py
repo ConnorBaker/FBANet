@@ -1,12 +1,13 @@
 # https://github.com/paganpasta/eqxvision/blob/7da790c7bfae76a3631a269b67c4846c329f1fa5/eqxvision/layers/drop_path.py
+from typing import Literal
+
 import equinox as eqx
-import jax
 import jax.numpy as jnp
 import jax.random as jrandom
-from jaxtyping import Array
+from jaxtyping import Array, Float, Key, Scalar
 
 
-class DropPath(eqx.Module, strict=True, frozen=True, kw_only=True):
+class DropPath(eqx.Module, strict=True):
     """Effectively dropping a sample from the call.
     Often used inside a network along side a residual connection.
     Equivalent to `torchvision.stochastic_depth`."""
@@ -23,7 +24,7 @@ class DropPath(eqx.Module, strict=True, frozen=True, kw_only=True):
     This may be toggled with `equinox.tree_inference`.
     """
 
-    mode: str = "global"
+    mode: Literal["global", "local"] = "global"
     """
     Can be set to `global` or `local`. If `global`, the whole input is dropped or retained.
     If `local`, then the decision on each input unit is computed independently. Defaults to `global`.
@@ -35,7 +36,7 @@ class DropPath(eqx.Module, strict=True, frozen=True, kw_only=True):
             the decision to drop/keep is made independently.
     """
 
-    def __call__(self, x, *, key: "jax.random.PRNGKey") -> Array:
+    def __call__(self, x: Float[Array, "..."], *, key: None | Key[Scalar, ""] = None) -> Array:
         """**Arguments:**
 
         - `x`: An any-dimensional JAX array to drop

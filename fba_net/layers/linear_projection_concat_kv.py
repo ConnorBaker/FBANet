@@ -6,7 +6,7 @@ from jaxtyping import Array, Float
 from fba_net.keygen import KEYS
 
 
-class LinearProjectionConcatKVLayer(eqx.Module, strict=True, kw_only=True):
+class LinearProjectionConcatKVLayer(eqx.Module, strict=True):
     # Input attributes
     dim: int
     heads: int = 8

@@ -10,7 +10,7 @@ from jaxtyping import Array, Float
 from .conv2d import Conv2dLayer
 
 
-class OutputProjLayer(eqx.Module, strict=True, kw_only=True):
+class OutputProjLayer(eqx.Module, strict=True):
     # Input attributes
     in_channels: int = 64
     out_channels: int = 3

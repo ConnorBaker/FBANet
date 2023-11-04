@@ -20,7 +20,10 @@ def sintel_pipeline(
     file_root: str,
     num_frames: int = 5,
     seed: int = 0,
-) -> tuple[UInt8[Array, "batches frames height width channels"], Float[Array, "batches frames-1 height width 2"],]:
+) -> tuple[
+    UInt8[Array, "batches frames height width channels"],
+    Float[Array, "batches frames-1 height width 2"],
+]:
     frames = fn.readers.sequence(file_root=file_root, sequence_length=num_frames).gpu()  # type: ignore
     # Move to the GPU for optical flow
     flows = fn.optical_flow(  # type: ignore

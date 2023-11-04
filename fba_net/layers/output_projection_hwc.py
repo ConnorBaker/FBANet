@@ -11,7 +11,7 @@ from .conv2d import Conv2dLayer
 
 
 # TODO: Is this literally the same as OutputProjLayer, just with the height and width dimensions combined?
-class OutputProjHWCLayer(eqx.Module, strict=True, kw_only=True):
+class OutputProjHWCLayer(eqx.Module, strict=True):
     # Input attributes
     in_channels: int = 64
     out_channels: int = 3

@@ -1,11 +1,12 @@
-import time
 import multiprocessing
 import os
+import time
 
 # from motion_selection import model_select
 from concurrent.futures import ThreadPoolExecutor
-import dm_pix
+
 import cv2
+import dm_pix
 import numpy as np
 from jax import numpy as jnp
 from jaxtyping import Array, Float
@@ -43,13 +44,15 @@ def register_frame(
     )
 
     # Use warpPerspective for Homography
-    img2_aligned: Float[Array, "height width 3"] = jnp.asarray(cv2.warpPerspective(
-        src=img2_np,
-        M=warp_matrix,
-        # dsize=(img1.shape[1], img1.shape[0]),
-        dsize=img1.shape[:2][::-1],
-        flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP,
-    ))
+    img2_aligned: Float[Array, "height width 3"] = jnp.asarray(
+        cv2.warpPerspective(
+            src=img2_np,
+            M=warp_matrix,
+            # dsize=(img1.shape[1], img1.shape[0]),
+            dsize=img1.shape[:2][::-1],
+            flags=cv2.INTER_LINEAR + cv2.WARP_INVERSE_MAP,
+        )
+    )
     end = time.time()
 
     print(f"homography time cost: {end - start}")

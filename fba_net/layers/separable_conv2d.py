@@ -8,7 +8,7 @@ from jaxtyping import Array, Float
 from .conv2d import Conv2dLayer
 
 
-class SepConv2dLayer(eqx.Module, strict=True, kw_only=True):
+class SepConv2dLayer(eqx.Module, strict=True):
     # Input attributes
     in_channels: int
     out_channels: int

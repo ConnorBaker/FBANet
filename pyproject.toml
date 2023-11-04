@@ -10,8 +10,8 @@ requires-python = ">=3.11"
 license = { text = "MIT" }
 description = "Towards Real-World Burst Image Super-Resolution: Benchmark and Method"
 dependencies = [
-    "jaxlib[cuda12_pip]@https://storage.googleapis.com/jax-releases/cuda12/jaxlib-0.4.19+cuda12.cudnn89-cp311-cp311-manylinux2014_x86_64.whl",
-    "jax[cuda12_pip]@https://storage.googleapis.com/jax-releases/cuda12/jaxlib-0.4.19+cuda12.cudnn89-cp311-cp311-manylinux2014_x86_64.whl",
+    "jaxlib[cuda12_pip]@https://storage.googleapis.com/jax-releases/cuda12/jaxlib-0.4.20+cuda12.cudnn89-cp311-cp311-manylinux2014_x86_64.whl",
+    "jax[cuda12_pip]@https://storage.googleapis.com/jax-releases/cuda12/jaxlib-0.4.20+cuda12.cudnn89-cp311-cp311-manylinux2014_x86_64.whl",
     # Using a PR 143 for jaxtyping: https://github.com/google/jaxtyping/pull/143
     "jaxtyping@https://github.com/google/jaxtyping/archive/e066118b070dfe22833c4ae2c240a8f4201d620d.tar.gz",
     "equinox@https://github.com/patrick-kidger/equinox/archive/48a27f91ce230d1f5a756a10be9c4f9530f36222.tar.gz",

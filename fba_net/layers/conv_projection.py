@@ -8,7 +8,7 @@ from jaxtyping import Array, Float
 from .separable_conv2d import SepConv2dLayer
 
 
-class ConvProjectionLayer(eqx.Module, strict=True, kw_only=True):
+class ConvProjectionLayer(eqx.Module, strict=True):
     # Input attributes
     dim: int
     heads: int = 8

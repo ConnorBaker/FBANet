@@ -3,7 +3,7 @@ from equinox import nn
 from .conv2d import Conv2dLayer
 
 
-def DownsampleFlattenLayer(in_channels: int, out_channels: int) -> nn.Conv2d:
+def DownsampleFlattenLayer(in_channels: int, out_channels: int) -> nn.Sequential:
     return Conv2dLayer(
         in_channels=in_channels,
         out_channels=out_channels,

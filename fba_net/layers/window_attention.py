@@ -4,12 +4,12 @@ from typing import Literal, overload
 import equinox as eqx
 from einops import rearrange, repeat
 from equinox import field, nn
-from jax import lax
 from jax import nn as jnn
 from jax import numpy as jnp
 from jax import random as jrandom
 from jaxtyping import Array, Float
 
+from fba_net.assert_shape import assert_shape
 from fba_net.keygen import KEYS
 
 from .conv_projection import ConvProjectionLayer
@@ -18,7 +18,7 @@ from .linear_projection_concat_kv import LinearProjectionConcatKVLayer
 from .squeeze_and_excitation import SELayer
 
 
-class WindowAttentionLayer(eqx.Module, strict=True, kw_only=True):
+class WindowAttentionLayer(eqx.Module, strict=True):
     # Input attributes
     dim: int
     window_length: int
@@ -51,10 +51,16 @@ class WindowAttentionLayer(eqx.Module, strict=True, kw_only=True):
         mean: float = 0.0,
         std: float = 1.0,
     ) -> Float[Array, "(2*window_length-1)*(2*window_length-1) heads"]:
-        type RetType = Float[Array, f"{2 * window_length - 1}*{2 * window_length - 1} heads"]
-        relative_position_bias_table: RetType = mean + std * jrandom.truncated_normal(
-            key=next(KEYS), lower=-2, upper=2, shape=((2 * window_length - 1) * (2 * window_length - 1), heads)
+        relative_position_bias_table = mean + std * jrandom.truncated_normal(
+            key=next(KEYS),
+            lower=-2,
+            upper=2,
+            shape=(
+                (2 * window_length - 1) * (2 * window_length - 1),
+                heads,
+            ),
         )
+        assert_shape(((2 * window_length - 1) ** 2, heads), relative_position_bias_table)
         return relative_position_bias_table
 
     @staticmethod
@@ -62,16 +68,23 @@ class WindowAttentionLayer(eqx.Module, strict=True, kw_only=True):
         window_length: int,
     ) -> Float[Array, "window_length*window_length window_length*window_length"]:
         # Generate 2D coordinate grid
-        coords_h, coords_w = jnp.meshgrid(*map(jnp.arange, [window_length, window_length]))  # Wh, Ww
+        coords = jnp.stack(jnp.mgrid[0:window_length, 0:window_length])
+        assert_shape((2, window_length, window_length), coords)
 
-        # Compute pairwise relative coordinates and rearrange dimensions to get (Wh*Ww, Wh*Ww, 2)
-        relative_coords = rearrange(coords_h[:, :, None] - coords_h[:, None, :], "h w d -> (h w) (h w) d") + rearrange(
-            coords_w[:, :, None] - coords_w[:, None, :], "h w d -> (h w) (h w) d"
-        ) * (2 * window_length - 1)
+        # Compute pairwise relative coordinates
+        relative_coords = rearrange(coords, "d i j -> d (i j) ()") - rearrange(coords, "d i j -> d () (i j)")
+        assert_shape((2, window_length * window_length, window_length * window_length), relative_coords)
 
-        # Sum over the last dimension to obtain relative position indices
-        type RetType = Float[Array, f"{window_length}*{window_length} {window_length}*{window_length}"]
-        relative_position_index: RetType = relative_coords.sum(-1)  # Wh*Ww, Wh*Ww
+        # Processing step and Summing the x and y differences after preventing overlap between x and y axes
+        relative_coords = rearrange(relative_coords, "d h w -> h w d")
+        assert_shape((window_length * window_length, window_length * window_length, 2), relative_coords)
+        relative_coords = relative_coords + (window_length - 1)
+        assert_shape((window_length * window_length, window_length * window_length, 2), relative_coords)
+        relative_coords = relative_coords * (2 * window_length - 1)
+        assert_shape((window_length * window_length, window_length * window_length, 2), relative_coords)
+
+        relative_position_index = jnp.sum(relative_coords, -1)
+        assert_shape((window_length * window_length, window_length * window_length), relative_position_index)
 
         return relative_position_index
 
@@ -142,13 +155,23 @@ class WindowAttentionLayer(eqx.Module, strict=True, kw_only=True):
         self.se = SELayer(channels=self.dim) if self.use_se_layer else nn.Identity()
         self.softmax = jnn.softmax
 
-    def __call__(self, x: Float[Array, "n c"], mask: None | Float[Array, "m n"] = None) -> Float[Array, "n c"]:
+    def __call__(self, x: Float[Array, "n d"], mask: None | Float[Array, "m n"] = None) -> Float[Array, "n d"]:
+        """
+        n: sequence length
+        d: dimension (`self.dim`)
+        # TODO: Is `d` for `self.dim` or `self.dim_head`?
+        """
         seq_length, channels = x.shape
         q, k, v = self.qkv(x)
         q = q * self.scale
-        attn = lax.dot_general(q, k, (((-2,), (-1,)), ((), ())))  # equivalent to q @ k.transpose(-2, -1)
+        assert_shape((self.heads, seq_length, self.dim_head), q)
+        assert_shape((self.heads, seq_length, self.dim_head), k)
+        assert_shape((self.heads, seq_length, self.dim_head), v)
+        # Multiply by the transpose of k
+        attn = q @ rearrange(k, "h n d -> h d n")
 
         # Use rearrange to do the reshaping and permuting
+        # TODO: Breaks here
         relative_position_bias = rearrange(
             self.relative_position_bias_table[self.relative_position_index],
             "(window_length window_length) heads -> heads window_length window_length",

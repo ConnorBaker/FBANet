@@ -1,4 +1,5 @@
 from collections.abc import Callable
+from functools import partial
 from typing import Literal
 
 import equinox as eqx
@@ -9,6 +10,7 @@ from jax import nn as jnn
 from jax import numpy as jnp
 from jaxtyping import Array, Float
 
+from fba_net.assert_shape import assert_shape
 from fba_net.layers.drop_path import DropPath
 from fba_net.layers.locally_enhanced_feed_forward import LeFFLayer
 from fba_net.layers.multi_layer_perceptron import MLPLayer
@@ -16,32 +18,33 @@ from fba_net.layers.window_attention import WindowAttentionLayer
 
 
 def window_partition(
-    x: Float[Array, "height*window_length width*window_length channels"],
+    x: Float[Array, "height*window_length width*window_length dim"],
     window_length: int,
-) -> Float[Array, "height*width window_length*window_length channels"]:
+) -> Float[Array, "height*width window_length*window_length dim"]:
     return rearrange(
         x,
-        "(height window_length) (width window_length) channels -> (height width) window_length window_length channels",
-        window_length=window_length,
+        "(height wl1) (width wl2) dim -> (height width) wl1 wl2 dim",
+        wl1=window_length,
+        wl2=window_length,
     )
 
 
 def window_reverse(
-    windows: Float[Array, "height*width window_length*window_length channels"],
+    windows: Float[Array, "height*width window_length*window_length dim"],
     height: int,
     width: int,
     window_length: int,
-) -> Float[Array, "height*window_length width*window_length channels"]:
+) -> Float[Array, "height*window_length width*window_length dim"]:
     return rearrange(
         windows,
-        "(height width) window_length window_length channels -> (height window_length) (width window_length) channels",
+        "(height width) window_length window_length dim -> (height window_length) (width window_length) dim",
         height=height,
         width=width,
         window_length=window_length,
     )
 
 
-class FBANetLayer(eqx.Module, strict=True, kw_only=True):
+class FBANetLayer(eqx.Module, strict=True):
     # Input attributes
     dim: int
     input_resolution: tuple[int, int]
@@ -95,7 +98,7 @@ class FBANetLayer(eqx.Module, strict=True, kw_only=True):
         if self.drop_path_rate <= 0.0:  # noqa: PLR2004
             self.drop_path = nn.Identity()
         else:
-            self.drop_path = DropPath(self.drop_path_rate)  # type: ignore
+            self.drop_path = DropPath(p=self.drop_path_rate)  # type: ignore
 
         mlp_hidden_dim = int(self.dim * self.mlp_ratio)
         if self.token_mlp == "ffn":
@@ -108,10 +111,11 @@ class FBANetLayer(eqx.Module, strict=True, kw_only=True):
         else:
             self.mlp = LeFFLayer(dim=self.dim, hidden_dim=mlp_hidden_dim, activation=self.activation)
 
-    def __call__(self, x: Float[Array, "length*length channels"]) -> Float[Array, "length*length channels"]:
+    def __call__(self, x: Float[Array, "length*length dim"]) -> Float[Array, "length*length dim"]:
         height, width = self.input_resolution
-        length_sq, channels = x.shape
+        length_sq, dim = x.shape
         assert length_sq == height * width, "input feature has wrong size"
+        assert dim == self.dim, "input feature has wrong dimension"
 
         # attn_mask is not None when self.shift_size > 0.
         attn_mask: None | Float[Array, "..."] = None
@@ -149,16 +153,18 @@ class FBANetLayer(eqx.Module, strict=True, kw_only=True):
                 jnp.full(shift_attn_mask.shape, float(0.0)),
             )
             attn_mask = attn_mask + shift_attn_mask if attn_mask is not None else shift_attn_mask
+            # TODO: Error here because I don't know what the shape should be.
+            assert_shape((height, width, dim), attn_mask)
 
         skip_connection = x
-        x = self.norm1(x)
+        x = jax.vmap(self.norm1)(x)
         x = rearrange(
             x,
-            "(height width) channels -> height width channels",
+            "(height width) dim -> height width dim",
             height=height,
             width=width,
-            channels=channels,
         )
+        assert_shape((height, width, dim), x)
 
         # cyclic shift
         if self.shift_size > 0:
@@ -169,20 +175,23 @@ class FBANetLayer(eqx.Module, strict=True, kw_only=True):
         # partition windows
         x_windows = rearrange(
             window_partition(shifted_x, window_length=self.window_length),  # nW, window_length, window_length, C
-            "num_windows window_length window_length channels -> num_windows (window_length window_length) channels",
-            window_length=self.window_length,
-            channels=channels,
+            "num_windows wl1 wl2 dim -> num_windows (wl1 wl2) dim",
+            wl1=self.window_length,
+            wl2=self.window_length,
+            dim=dim,
         )
 
         # W-MSA/SW-MSA
-        attn_windows = self.attn(x_windows, mask=attn_mask)  # nW, window_length*window_length, C
+        attn_windows = jax.vmap(partial(self.attn, mask=attn_mask))(x_windows)  # nW, window_length*window_length, C
+        assert_shape((None, self.window_length * self.window_length, dim), attn_windows)
 
         # merge windows
         attn_windows = rearrange(
             attn_windows,
-            "num_windows (window_length window_length) channels -> num_windows window_length window_length channels",
-            window_length=self.window_length,
-            channels=channels,
+            "num_windows (wl1 wl2) dim -> num_windows wl1 wl2 dim",
+            wl1=self.window_length,
+            wl2=self.window_length,
+            dim=dim,
         )
 
         shifted_x = window_reverse(
@@ -195,7 +204,7 @@ class FBANetLayer(eqx.Module, strict=True, kw_only=True):
         else:
             x = shifted_x
 
-        x = rearrange(x, "height width channels -> (height width) channels")
+        x = rearrange(x, "height width dim -> (height width) dim")
 
         # FFN
         x = skip_connection + self.drop_path(x)

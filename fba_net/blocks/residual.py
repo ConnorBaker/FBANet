@@ -9,7 +9,7 @@ from fba_net.layers.conv2d import Conv2dLayer
 
 
 @final
-class ResBlock(eqx.Module, strict=True, kw_only=True):
+class ResBlock(eqx.Module, strict=True):
     """
     Residual block with two convolutional layers sandwiching a ReLU, and a skip connection.
     """

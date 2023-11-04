@@ -3,16 +3,17 @@
 ## Code by YujingSun
 """
 
-
 from collections.abc import Callable, Sequence
 from typing import Literal, TypedDict
 
 import equinox as eqx
+import jax
 from equinox import field, nn
 from jax import image as jim
 from jax import numpy as jnp
 from jaxtyping import Array, Float
 
+from fba_net.assert_shape import assert_shape
 from fba_net.blocks.fba_net import FBANetBlock
 from fba_net.blocks.federated_affinity_fusion import FAFBlock
 from fba_net.blocks.residual import ResBlock
@@ -25,14 +26,14 @@ from fba_net.layers.output_projection_hwc import OutputProjHWCLayer
 from fba_net.layers.upsample import UpsampleLayer
 
 
-class FBANetModel(eqx.Module, strict=True, kw_only=True):
+class FBANetModel(eqx.Module, strict=True):
     # Input attributes
     num_frames: int = 14
     img_size: int = 128
     in_channels: int = 3
     embed_dim: int = 32
-    depths: Sequence[int] = [2, 2, 2, 2, 2, 2, 2, 2, 2]
-    heads: Sequence[int] = [1, 2, 4, 8, 16, 16, 8, 4, 2]
+    depths: Sequence[int] = field(default_factory=lambda: [2, 2, 2, 2, 2, 2, 2, 2, 2])
+    heads: Sequence[int] = field(default_factory=lambda: [1, 2, 4, 8, 16, 16, 8, 4, 2])
     window_length: int = 8
     mlp_ratio: float = 4.0
     use_qkv_bias: bool = True
@@ -53,7 +54,7 @@ class FBANetModel(eqx.Module, strict=True, kw_only=True):
     output_proj_HG2_0: OutputProjHWCLayer = field(init=False)
     output_proj_HG2_1: OutputProjHWCLayer = field(init=False)
     fusion: FAFBlock = field(init=False)
-    head: nn.Conv2d = field(init=False)
+    head: nn.Sequential = field(init=False)
     body: nn.Sequential = field(init=False)
     tail: nn.Sequential = field(init=False)
     HG1_encoderlayer_0: FBANetBlock = field(init=False)
@@ -78,18 +79,14 @@ class FBANetModel(eqx.Module, strict=True, kw_only=True):
     def __post_init__(self) -> None:
         self.pos_drop = nn.Dropout(self.drop_rate)
         # Input/Output
-        self.input_proj = InputProjLayer(in_channels=self.in_channels, out_channels=self.embed_dim)
+        self.input_proj = InputProjLayer(in_channels=self.embed_dim, out_channels=self.embed_dim)
         self.output_proj = OutputProjHWCLayer(in_channels=2 * self.embed_dim, out_channels=self.embed_dim)
         self.output_proj_2 = OutputProjLayer(in_channels=2 * self.embed_dim, out_channels=self.embed_dim)
         self.output_proj_HG2_0 = OutputProjHWCLayer(in_channels=8 * self.embed_dim, out_channels=4 * self.embed_dim)
         self.output_proj_HG2_1 = OutputProjHWCLayer(in_channels=4 * self.embed_dim, out_channels=2 * self.embed_dim)
-        self.fusion = FAFBlock(
-            num_feats=self.embed_dim,
-            num_frames=self.num_frames,
-            center_frame_idx=0,
-        )
+        self.fusion = FAFBlock(num_feats=self.embed_dim, num_frames=self.num_frames)
         self.head = Conv2dLayer(in_channels=self.in_channels, out_channels=self.embed_dim)
-        self.body = nn.Sequential([ResBlock(num_feats=self.embed_dim) for _ in range(2)])
+        self.body = nn.Sequential([nn.Lambda(ResBlock(num_feats=self.embed_dim)) for _ in range(2)])
         self.tail = nn.Sequential(
             [
                 UpsamplerBlock(scale_pow_two=1, num_feats=self.embed_dim),
@@ -138,7 +135,7 @@ class FBANetModel(eqx.Module, strict=True, kw_only=True):
             input_resolution=(self.img_size, self.img_size),
             depth=self.depths[0],
             heads=self.heads[0],
-            drop_path_rate=enc_dpr[sum(self.depths[:0]): sum(self.depths[:1])],
+            drop_path_rate=enc_dpr[sum(self.depths[:0]) : sum(self.depths[:1])],
         )
         self.HG1_downsample_0 = DownsampleLayer(in_channels=self.embed_dim, out_channels=self.embed_dim * 2)
         self.HG1_encoderlayer_1 = FBANetBlock(
@@ -147,7 +144,7 @@ class FBANetModel(eqx.Module, strict=True, kw_only=True):
             input_resolution=(self.img_size // 2, self.img_size // 2),
             depth=self.depths[1],
             heads=self.heads[1],
-            drop_path_rate=enc_dpr[sum(self.depths[:1]): sum(self.depths[:2])],
+            drop_path_rate=enc_dpr[sum(self.depths[:1]) : sum(self.depths[:2])],
         )
 
         self.HG1_downsample_1 = DownsampleLayer(in_channels=self.embed_dim * 2, out_channels=self.embed_dim * 4)
@@ -179,7 +176,7 @@ class FBANetModel(eqx.Module, strict=True, kw_only=True):
             input_resolution=(self.img_size, self.img_size),
             depth=self.depths[6],
             heads=self.heads[6],
-            drop_path_rate=dec_dpr[sum(self.depths[5:6]): sum(self.depths[5:7])],
+            drop_path_rate=dec_dpr[sum(self.depths[5:6]) : sum(self.depths[5:7])],
         )
 
         # HG Block2
@@ -190,7 +187,7 @@ class FBANetModel(eqx.Module, strict=True, kw_only=True):
             input_resolution=(self.img_size, self.img_size),
             depth=self.depths[0],
             heads=self.heads[0],
-            drop_path_rate=enc_dpr[sum(self.depths[:0]): sum(self.depths[:1])],
+            drop_path_rate=enc_dpr[sum(self.depths[:0]) : sum(self.depths[:1])],
         )
         self.HG2_downsample_0 = DownsampleLayer(in_channels=self.embed_dim, out_channels=self.embed_dim * 2)
         self.HG2_encoderlayer_1 = FBANetBlock(
@@ -199,7 +196,7 @@ class FBANetModel(eqx.Module, strict=True, kw_only=True):
             input_resolution=(self.img_size // 2, self.img_size // 2),
             depth=self.depths[1],
             heads=self.heads[1],
-            drop_path_rate=enc_dpr[sum(self.depths[:1]): sum(self.depths[:2])],
+            drop_path_rate=enc_dpr[sum(self.depths[:1]) : sum(self.depths[:2])],
         )
         self.HG2_downsample_1 = DownsampleLayer(in_channels=self.embed_dim * 2, out_channels=self.embed_dim * 4)
 
@@ -230,7 +227,7 @@ class FBANetModel(eqx.Module, strict=True, kw_only=True):
             input_resolution=(self.img_size, self.img_size),
             depth=self.depths[6],
             heads=self.heads[6],
-            drop_path_rate=dec_dpr[sum(self.depths[5:6]): sum(self.depths[5:7])],
+            drop_path_rate=dec_dpr[sum(self.depths[5:6]) : sum(self.depths[5:7])],
         )
 
     #     self.apply(self._init_weights)
@@ -244,29 +241,32 @@ class FBANetModel(eqx.Module, strict=True, kw_only=True):
     #         nn.init.constant_(m.bias, 0)
     #         nn.init.constant_(m.weight, 1.0)
 
-    def forward(self, x: Float[Array, "F H W C"]) -> Float[Array, "H W C"]:
+    def __call__(self, x: Float[Array, "F H W C"]) -> Float[Array, "H W C"]:
         # Input Multi-Frame Conv
-        _t, _h, _w, c = x.shape
-        assert c == 3, "In channels should be 3!"
+        assert_shape((self.num_frames, self.img_size, self.img_size, 3), x)
 
-        x_base = x[0, :, :, :]  # [c, h, w]
+        x_base = x[0]
+        assert_shape((self.img_size, self.img_size, 3), x_base)
 
         # feature extraction of aligned frames
         # NOTE: embed_dim was originally after t, before h and w.
         # Because channels are now last, I've put embed_dim in the same place channels were.
-        x_feat_head = self.head(x)  # [t, h, w, embed_dim]
-        x_feat_body = self.body(x_feat_head)  # [t, h, w, embed_dim]
+        # See https://pytorch.org/docs/stable/generated/torch.nn.Conv2d.html#conv2d for calculating the shape
+        # of output arrays after convolution.
+        # Here, we use padding=0, stride=1, dilation=1, and kernel_size=3, so each dimension is reduced by 2.
+        x_feat_head = jax.vmap(self.head)(x)  # [t, h, w, embed_dim]
+        assert_shape((self.num_frames, self.img_size, self.img_size, self.embed_dim), x_feat_head)
 
-        feat = x_feat_body  # [t, h, w, embed_dim]
+        x_feat_body = jax.vmap(self.body)(x_feat_head)  # [t, h, w, embed_dim]
+        assert_shape((self.num_frames, self.img_size, self.img_size, self.embed_dim), x_feat_body)
 
         # fusion of aligned features
-        fusion_feat = self.fusion(feat)  # fusion feat [h, w, embed_dim]
-
-        assert fusion_feat.ndim == 3, "Fusion Feat should be [H,W,C]!"
+        fusion_feat = self.fusion(x_feat_body)  # fusion feat [h, w, embed_dim]
+        assert_shape((self.img_size, self.img_size, self.embed_dim), fusion_feat)
 
         # Input Projection
-        y = self.input_proj(fusion_feat)  # H*W, C
-        y = self.pos_drop(y)
+        y = self.pos_drop(self.input_proj(fusion_feat))  # H*W, embed_dim
+        assert_shape((self.img_size * self.img_size, self.embed_dim), y)
 
         # HG1
         # Encoder

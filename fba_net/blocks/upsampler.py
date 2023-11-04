@@ -10,7 +10,7 @@ from fba_net.layers.pixel_shuffle import PixelShuffleLayer
 
 
 @final
-class UpsamplerBlock(eqx.Module, strict=True, kw_only=True):
+class UpsamplerBlock(eqx.Module, strict=True):
     scale_pow_two: Literal[1, 2, 3, 4]
     num_feats: int
     body: nn.Sequential = field(init=False)

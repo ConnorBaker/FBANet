@@ -39,7 +39,7 @@ class ManualDatasets(torch.utils.data.Dataset):
         """
         assert burst_size <= 14, "burst_sz must be less than or equal to 14"
         # assert crop_sz <= 80, 'crop_sz must be less than or equal to 80'
-        assert split in ["train", "val"]
+        assert split in {"train", "val"}
         super().__init__()
 
         self.transform = transforms.Compose([transforms.ToTensor()])
@@ -176,7 +176,7 @@ class ManualDatasets_validation(torch.utils.data.Dataset):
         """
         assert burst_size <= 14, "burst_sz must be less than or equal to 14"
         # assert crop_sz <= 80, 'crop_sz must be less than or equal to 80'
-        assert split in ["train", "val"]
+        assert split in {"train", "val"}
         super().__init__()
 
         self.transform = transforms.Compose([transforms.ToTensor()])
@@ -307,7 +307,7 @@ class ManualDatasets_test(torch.utils.data.Dataset):
         """
         # assert burst_size <= 14, 'burst_sz must be less than or equal to 14'
         # assert crop_sz <= 80, 'crop_sz must be less than or equal to 80'
-        assert split in ["train", "val"]
+        assert split in {"train", "val"}
         super().__init__()
 
         self.transform = transforms.Compose([transforms.ToTensor()])

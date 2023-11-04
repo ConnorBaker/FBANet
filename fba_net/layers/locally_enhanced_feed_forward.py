@@ -12,7 +12,7 @@ from fba_net.keygen import KEYS
 from .conv2d import Conv2dLayer
 
 
-class LeFFLayer(eqx.Module, strict=True, kw_only=True):
+class LeFFLayer(eqx.Module, strict=True):
     # Input attributes
     dim: int = 32
     hidden_dim: int = 128

@@ -14,7 +14,7 @@ from .real_bsr_dataset import RealBSRData, RealBSRDataset, RealBSRDatasetKwargs
 
 
 @final
-@dataclass(frozen=True, slots=True, eq=True, kw_only=True)
+@dataclass(frozen=True, slots=True, eq=True)
 class DaliKwargs:
     # Seed is required for the sake of reproducibility
     seed: int

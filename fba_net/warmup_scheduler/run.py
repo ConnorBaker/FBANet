@@ -1,7 +1,6 @@
 import torch
 from torch.optim.lr_scheduler import StepLR
 from torch.optim.sgd import SGD
-
 from warmup_scheduler import GradualWarmupScheduler
 
 if __name__ == "__main__":

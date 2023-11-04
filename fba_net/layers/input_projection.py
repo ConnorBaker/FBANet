@@ -10,7 +10,7 @@ from jaxtyping import Array, Float
 from .conv2d import Conv2dLayer
 
 
-class InputProjLayer(eqx.Module, strict=True, kw_only=True):
+class InputProjLayer(eqx.Module, strict=True):
     # Input attributes
     in_channels: int
     out_channels: int
@@ -35,16 +35,14 @@ class InputProjLayer(eqx.Module, strict=True, kw_only=True):
                     out_channels=self.out_channels,
                     kernel_size=self.kernel_size,
                     stride=self.stride,
-                    padding=self.kernel_size // 2,
                 ),
-                nn.PReLU() if activation is None else activation,
+                nn.Lambda(nn.PReLU() if activation is None else activation),
                 # Rearrange
                 nn.Lambda(partial(rearrange, pattern="height width channels-> (height width) channels")),
                 # Normalization
-                nn.Identity() if normalization is None else normalization,
+                nn.Identity() if normalization is None else nn.Lambda(normalization),
             ]
         )
 
-    # TODO: Need to change callsites to make sure channels are last
     def __call__(self, x: Float[Array, "height width channels"]) -> Float[Array, "height*width channels"]:
         return self.body(x)

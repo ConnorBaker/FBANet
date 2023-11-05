@@ -126,7 +126,7 @@ def _04_register_lr_frames(lr_frames: DataNode, flows: DataNode, seed: int) -> D
     # grid: 2 x RealBSRDataset.lr_frame_shape[0, 1]
     # This isn't a scalar type, but there's no way to type ConstantNode :l
     grid = types.Constant(
-        value=np.mgrid[0 : RealBSRDataset.lr_frame_shape[0], 0 : RealBSRDataset.lr_frame_shape[1]],
+        value=np.mgrid[: RealBSRDataset.lr_frame_shape[0], : RealBSRDataset.lr_frame_shape[1]],
         dtype=types.DALIDataType.INT64,
         shape=(2, RealBSRDataset.lr_frame_shape[0], RealBSRDataset.lr_frame_shape[1]),
         layout="NHW",

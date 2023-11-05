@@ -7,6 +7,7 @@ from equinox import field, nn
 from jax import nn as jnn
 from jax import numpy as jnp
 from jax import random as jrandom
+import jax
 from jaxtyping import Array, Float
 
 from fba_net.assert_shape import assert_shape
@@ -68,7 +69,7 @@ class WindowAttentionLayer(eqx.Module, strict=True):
         window_length: int,
     ) -> Float[Array, "window_length*window_length window_length*window_length"]:
         # Generate 2D coordinate grid
-        coords = jnp.stack(jnp.mgrid[0:window_length, 0:window_length])
+        coords = jnp.stack(jnp.mgrid[:window_length, :window_length])
         assert_shape((2, window_length, window_length), coords)
 
         # Compute pairwise relative coordinates
@@ -96,7 +97,8 @@ class WindowAttentionLayer(eqx.Module, strict=True):
         *,
         use_bias: bool = True,
         token_projection: Literal["linear"] = "linear",
-    ) -> LinearProjectionLayer: ...
+    ) -> LinearProjectionLayer:
+        ...
 
     @overload
     @staticmethod
@@ -106,7 +108,8 @@ class WindowAttentionLayer(eqx.Module, strict=True):
         *,
         use_bias: bool = True,
         token_projection: Literal["linear_concat"] = "linear_concat",
-    ) -> LinearProjectionConcatKVLayer: ...
+    ) -> LinearProjectionConcatKVLayer:
+        ...
 
     @overload
     @staticmethod
@@ -116,7 +119,8 @@ class WindowAttentionLayer(eqx.Module, strict=True):
         *,
         use_bias: bool = True,
         token_projection: Literal["conv"] = "conv",
-    ) -> ConvProjectionLayer: ...
+    ) -> ConvProjectionLayer:
+        ...
 
     @staticmethod
     def mk_qkv(
@@ -155,50 +159,67 @@ class WindowAttentionLayer(eqx.Module, strict=True):
         self.se = SELayer(channels=self.dim) if self.use_se_layer else nn.Identity()
         self.softmax = jnn.softmax
 
-    def __call__(self, x: Float[Array, "n d"], mask: None | Float[Array, "m n"] = None) -> Float[Array, "n d"]:
+    def __call__(self, x: Float[Array, "N D"], mask: None | Float[Array, "NW WH*WW N"] = None) -> Float[Array, "N D"]:
         """
-        n: sequence length
-        d: dimension (`self.dim`)
-        # TODO: Is `d` for `self.dim` or `self.dim_head`?
+        N: sequence length
+        NW: number of windows
+        WH: window height
+        WW: window width
+        D: dimension (`self.dim`)
         """
-        seq_length, channels = x.shape
+        H, (N, D) = self.heads, x.shape
+        assert D == self.dim, f"Expected {self.dim} channels, got {D} channels"
+        # TODO: This seems like a pre-condition -- it's the purpose of calculating dimension_expansion_factor.
+        assert (
+            N % self.window_length == 0
+        ), f"Sequence length {N} is not divisible by window length {self.window_length}"
         q, k, v = self.qkv(x)
         q = q * self.scale
-        assert_shape((self.heads, seq_length, self.dim_head), q)
-        assert_shape((self.heads, seq_length, self.dim_head), k)
-        assert_shape((self.heads, seq_length, self.dim_head), v)
+        assert_shape((H, N, D), q)
+        assert_shape((H, N, D), k)
+        assert_shape((H, N, D), v)
+
         # Multiply by the transpose of k
-        attn = q @ rearrange(k, "h n d -> h d n")
+        # Matrix multiplication rules: (h, n, d) @ (h, d, n) -> (h, n, n)
+        attn: Float[Array, "H N N"] = q @ rearrange(k, "h n d -> h d n", h=H, n=N, d=D)
+        assert_shape((H, N, N), attn)
 
         # Use rearrange to do the reshaping and permuting
-        # TODO: Breaks here
+        # TODO: In this code, the product of the window height and width is the sequence length.
+        # Is it possible that one of these dimensions is actually the sequence length, and
+        # that we don't have two dimensions that are both the product of the window height and width?
         relative_position_bias = rearrange(
             self.relative_position_bias_table[self.relative_position_index],
-            "(window_length window_length) heads -> heads window_length window_length",
-            window_length=self.window_length,
-            heads=self.heads,
+            "Wh_Ww1 Wh_Ww2 h -> h Wh_Ww1 Wh_Ww2",
+            Wh_Ww1=self.window_length * self.window_length,
+            Wh_Ww2=self.window_length * self.window_length,
+            h=H,
         )
 
         dimension_expansion_factor: int = attn.shape[-1] // relative_position_bias.shape[-1]
         relative_position_bias = repeat(
             relative_position_bias,
-            "heads window_length channels -> heads window_length (channels d)",
-            heads=self.heads,
-            window_length=self.window_length,
-            channels=channels,
-            d=dimension_expansion_factor,
+            "h Wh_Ww1 Wh_Ww2 -> h Wh_Ww1 (Wh_Ww2 exp_factor)",
+            h=H,
+            Wh_Ww1=self.window_length * self.window_length,
+            Wh_Ww2=self.window_length * self.window_length,
+            exp_factor=dimension_expansion_factor,
         )
+        assert_shape((H, N, N), relative_position_bias)
 
-        # Add relative position bias, indexing with None to add an extra dimension
-        attn = attn + relative_position_bias[None]
+        # Add relative position bias
+        # TODO: Look up shape broadcasting rules.
+        # Do we need the product of window width and height to equal the sequence length?
+        assert N == self.window_length * self.window_length, f"Expected N to be {self.window_length ** 2}, got {N}"
+        attn = attn + relative_position_bias
+        assert_shape((self.heads, N, N), attn)
 
         if mask is not None:
+            assert False, "there is where you left off"
             # Add an extra dimension to mask for compatibility with attn dimensions
-            mask_expanded = repeat(mask, "num_windows seq_length -> num_windows seq_length ()")
+            mask_expanded = repeat(mask, "nw wh_ww n -> nw wh_ww (n exp_factor)", exp_factor=dimension_expansion_factor)
             # Reshape attn to separate out the heads and sequence length dimensions
-            attn_reshaped = rearrange(
-                attn, "(heads seq_length) len -> heads seq_length len", heads=self.heads, seq_length=seq_length
-            )
+            attn_reshaped = rearrange(attn, "(h n) len -> h n len", h=H, n=N)
             # Expand dimensions of mask to align with attn dimensions
             attn_mask_aligned = attn_reshaped + rearrange(
                 mask_expanded, "num_windows seq_length () -> num_windows () seq_length ()"
@@ -211,15 +232,18 @@ class WindowAttentionLayer(eqx.Module, strict=True):
         # Apply dropout to attention weights
         attn_dropped = self.attn_drop(attn_weights)
 
-        # Matrix multiplication with value matrix, and re-arrange dimensions to get the output
+        # Matrix multiplication with value matrix, and re-arrange dimensions to get the output.
+        # TODO: I guess self.heads must always be 1 so we can squeeze that dimension away?
         x = rearrange(
             attn_dropped @ v,
-            "heads seq_length (heads dim_head) -> seq_length (heads dim_head)",
-            heads=self.heads,
-            dim_head=self.dim_head,
+            "h n dh -> n (h dh)",
+            h=H,
+            n=N,
+            dh=self.dim_head,
         )
+        assert_shape((N, D), x)
         # Pass through the projection layer
-        x_projected = self.proj(x)
+        x_projected = jax.vmap(self.proj)(x)
         # Apply Squeeze-and-Excitation if applicable
         x_se = self.se(x_projected)
         # Apply dropout to the projected output

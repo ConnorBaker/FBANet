@@ -33,7 +33,7 @@ def register_frame(
 
     # Compute the grid
     _channels, height, width = frame.shape
-    grid: Int32[Array, "2 height width"] = jnp.mgrid[0:height, 0:width]
+    grid: Int32[Array, "2 height width"] = jnp.mgrid[:height, :width]
 
     # Compute the warped grid
     warp_grid: Float[Array, "2 height width"] = grid - flow

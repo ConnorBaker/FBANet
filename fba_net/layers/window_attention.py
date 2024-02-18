@@ -2,12 +2,12 @@ from collections.abc import Callable
 from typing import Literal, overload
 
 import equinox as eqx
+import jax
 from einops import rearrange, repeat
 from equinox import field, nn
 from jax import nn as jnn
 from jax import numpy as jnp
 from jax import random as jrandom
-import jax
 from jaxtyping import Array, Float
 
 from fba_net.assert_shape import assert_shape

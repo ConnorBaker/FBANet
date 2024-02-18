@@ -94,7 +94,7 @@ class FBANetLayer(eqx.Module, strict=True):
             use_se_layer=self.use_se_layer,
         )
 
-        if self.drop_path_rate <= 0.0:  # noqa: PLR2004
+        if self.drop_path_rate <= 0.0:
             self.drop_path = nn.Identity()
         else:
             self.drop_path = DropPath(p=self.drop_path_rate)  # type: ignore

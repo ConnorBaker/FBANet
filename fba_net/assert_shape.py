@@ -1,10 +1,9 @@
 from collections.abc import Iterable
-from typing import NoReturn
 
 from jaxtyping import Array, Shaped
 
 
-def assert_shape(shape: Iterable[None | int], array: Shaped[Array, "..."]) -> None | NoReturn:
+def assert_shape(shape: Iterable[None | int], array: Shaped[Array, "..."]) -> None:
     """Assert that the shape of an array matches the expected shape."""
     try:
         for expected, actual in zip(shape, array.shape, strict=True):

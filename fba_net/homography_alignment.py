@@ -35,7 +35,7 @@ def register_frame(
 
     # Run the ECC algorithm. The results are stored in warpMatrix, which begins as the
     # identity matrix and is updated by ECC.
-    (cc, warp_matrix) = cv2.findTransformECC(
+    (_cc, warp_matrix) = cv2.findTransformECC(
         templateImage=cv2.cvtColor(img1_np, cv2.COLOR_BGR2GRAY),
         inputImage=cv2.cvtColor(img2_np, cv2.COLOR_BGR2GRAY),
         warpMatrix=np.eye(3, 3, dtype=np.float32),
@@ -64,13 +64,21 @@ def register_frame(
     return img2_aligned
 
 
-def process_one_frame(i, im1, LR_patch_path, LR_list, LR_number1, LR_number2, save_LR_path):
+def process_one_frame(  # noqa: PLR0917
+    i,
+    im1,
+    LR_patch_path,
+    LR_list,
+    LR_number1,
+    LR_number2,
+    save_LR_path,
+):
     # im2_path = '{}/{}/{}_MFSR_Sony_{:04d}_x4_{:02d}.png'.format(LR_patch_path, LR_list, LR_number1, LR_number2, i)
     im2_path = "{}/{}/{}_MFSR_Sony_{:04d}_x1_{:02d}.png".format(LR_patch_path, LR_list, LR_number1, LR_number2, i)
     im2 = cv2.imread(im2_path)
 
     if not os.path.exists(im2_path):
-        logs = open("DRealBSR_test.txt", "a")
+        logs = open("DRealBSR_test.txt", "a", encoding="utf-8")
         logs.write(im2_path)
         logs.write("\n")
         logs.close()
@@ -107,7 +115,7 @@ def process_one_frame(i, im1, LR_patch_path, LR_list, LR_number1, LR_number2, sa
 
     try:
         # Run the ECC algorithm. The results are stored in warp_matrix.
-        (cc, warp_matrix) = cv2.findTransformECC(im1_gray, im2_gray, warp_matrix, warp_mode, criteria)
+        (_cc, warp_matrix) = cv2.findTransformECC(im1_gray, im2_gray, warp_matrix, warp_mode, criteria)
 
         if warp_mode == cv2.MOTION_HOMOGRAPHY:
             # Use warpPerspective for Homography
@@ -129,19 +137,14 @@ def process_one_frame(i, im1, LR_patch_path, LR_list, LR_number1, LR_number2, sa
         # cv2.imwrite('aligned_images/000_0017_Image0.png', im1)
         # cv2.imwrite('aligned_images/000_0017_Image{}.png'.format(count), im2)
 
-        # cv2.imwrite('{}/{}_MFSR_Sony_{:04d}_x4_{:02d}.png'.format(save_LR_path, LR_number1, LR_number2, i), im2_aligned)
         cv2.imwrite("{}/{}_MFSR_Sony_{:04d}_x1_{:02d}.png".format(save_LR_path, LR_number1, LR_number2, i), im2_aligned)
 
-    except:
+    except Exception as e:
         cv2.imwrite("{}/{}_MFSR_Sony_{:04d}_x1_{:02d}.png".format(save_LR_path, LR_number1, LR_number2, i), im2)
-        print("An error occured when ECC not converge")
+        print("An error occured when ECC not converge:", e)
 
 
 def process_one_image(LR_list):
-    global LR_patch_path
-    global save_path
-    global save_gt_path
-
     # LR_path = os.path.join(LR_patch_path, LR_list)
     LR_number1 = LR_list.split("_")[0]
     LR_number2 = int(LR_list.split("_")[-1])
@@ -163,7 +166,7 @@ def process_one_image(LR_list):
 
     with ThreadPoolExecutor(max_workers=16) as t:
         for i in range(1, 14):
-            # 每帧新开一个线程，进程间传递图像成本太高
+            # 每帧新开一个线程, 进程间传递图像成本太高
             t.submit(
                 lambda cxp: process_one_frame(*cxp),
                 (i, im1, LR_patch_path, LR_list, LR_number1, LR_number2, save_LR_path),

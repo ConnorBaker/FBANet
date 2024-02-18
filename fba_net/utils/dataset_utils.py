@@ -180,7 +180,7 @@ def tensor_merge(blocks, tensor, psize, overlap, pad=True):
     return tensor_new
 
 
-### rotate and flip
+# rotate and flip
 class Augment_RGB_torch:
     def __init__(self):
         pass
@@ -217,7 +217,7 @@ class Augment_RGB_torch:
         return torch_tensor
 
 
-### mix two images
+# mix two images
 class MixUp_AUG:
     def __init__(self):
         self.dist = torch.distributions.beta.Beta(torch.tensor([1.2]), torch.tensor([1.2]))

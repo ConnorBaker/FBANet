@@ -15,18 +15,16 @@ class SELayer(eqx.Module, strict=True):
     body: nn.Sequential = field(init=False)
 
     def __post_init__(self) -> None:
-        self.body = nn.Sequential(
-            [
-                # Squeeze step using average pooling
-                nn.Lambda(partial(reduce, pattern="h w c -> c", reduction="mean")),
-                # Excitation step
-                nn.Linear(self.channels, self.channels // self.reduction, use_bias=False, key=next(KEYS)),
-                nn.Lambda(jnn.relu),
-                nn.Linear(self.channels // self.reduction, self.channels, use_bias=False, key=next(KEYS)),
-                nn.Lambda(jnn.sigmoid),
-                nn.Lambda(partial(rearrange, pattern="c -> c () ()")),
-            ]
-        )
+        self.body = nn.Sequential([
+            # Squeeze step using average pooling
+            nn.Lambda(partial(reduce, pattern="h w c -> c", reduction="mean")),
+            # Excitation step
+            nn.Linear(self.channels, self.channels // self.reduction, use_bias=False, key=next(KEYS)),
+            nn.Lambda(jnn.relu),
+            nn.Linear(self.channels // self.reduction, self.channels, use_bias=False, key=next(KEYS)),
+            nn.Lambda(jnn.sigmoid),
+            nn.Lambda(partial(rearrange, pattern="c -> c () ()")),
+        ])
 
     def __call__(self, x: Float[Array, "h w c"]) -> Float[Array, "h w c"]:
         return self.body(x) * x

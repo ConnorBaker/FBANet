@@ -19,13 +19,11 @@ class ResBlock(eqx.Module, strict=True):
     body: nn.Sequential = field(init=False)
 
     def __post_init__(self) -> None:
-        self.body = nn.Sequential(
-            [
-                Conv2dLayer(in_channels=self.num_feats, out_channels=self.num_feats),
-                nn.Lambda(jnn.relu),
-                Conv2dLayer(in_channels=self.num_feats, out_channels=self.num_feats),
-            ]
-        )
+        self.body = nn.Sequential([
+            Conv2dLayer(in_channels=self.num_feats, out_channels=self.num_feats),
+            nn.Lambda(jnn.relu),
+            Conv2dLayer(in_channels=self.num_feats, out_channels=self.num_feats),
+        ])
 
     def __call__(self, x: Float[Array, "..."]) -> Float[Array, "..."]:
         return self.body(x) + x

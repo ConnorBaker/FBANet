@@ -27,22 +27,20 @@ class InputProjLayer(eqx.Module, strict=True):
         normalization: None | Callable[[Float[Array, "..."]], Float[Array, "..."]],
         activation: None | Callable[[Float[Array, "..."]], Float[Array, "..."]],
     ) -> None:
-        self.body = nn.Sequential(
-            [
-                # Projection
-                Conv2dLayer(
-                    in_channels=self.in_channels,
-                    out_channels=self.out_channels,
-                    kernel_size=self.kernel_size,
-                    stride=self.stride,
-                ),
-                nn.Lambda(nn.PReLU() if activation is None else activation),
-                # Rearrange
-                nn.Lambda(partial(rearrange, pattern="height width channels-> (height width) channels")),
-                # Normalization
-                nn.Identity() if normalization is None else nn.Lambda(normalization),
-            ]
-        )
+        self.body = nn.Sequential([
+            # Projection
+            Conv2dLayer(
+                in_channels=self.in_channels,
+                out_channels=self.out_channels,
+                kernel_size=self.kernel_size,
+                stride=self.stride,
+            ),
+            nn.Lambda(nn.PReLU() if activation is None else activation),
+            # Rearrange
+            nn.Lambda(partial(rearrange, pattern="height width channels-> (height width) channels")),
+            # Normalization
+            nn.Identity() if normalization is None else nn.Lambda(normalization),
+        ])
 
     def __call__(self, x: Float[Array, "height width channels"]) -> Float[Array, "height*width channels"]:
         return self.body(x)

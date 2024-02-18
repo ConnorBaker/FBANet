@@ -97,8 +97,7 @@ class WindowAttentionLayer(eqx.Module, strict=True):
         *,
         use_bias: bool = True,
         token_projection: Literal["linear"] = "linear",
-    ) -> LinearProjectionLayer:
-        ...
+    ) -> LinearProjectionLayer: ...
 
     @overload
     @staticmethod
@@ -108,8 +107,7 @@ class WindowAttentionLayer(eqx.Module, strict=True):
         *,
         use_bias: bool = True,
         token_projection: Literal["linear_concat"] = "linear_concat",
-    ) -> LinearProjectionConcatKVLayer:
-        ...
+    ) -> LinearProjectionConcatKVLayer: ...
 
     @overload
     @staticmethod
@@ -119,8 +117,7 @@ class WindowAttentionLayer(eqx.Module, strict=True):
         *,
         use_bias: bool = True,
         token_projection: Literal["conv"] = "conv",
-    ) -> ConvProjectionLayer:
-        ...
+    ) -> ConvProjectionLayer: ...
 
     @staticmethod
     def mk_qkv(
@@ -210,7 +207,7 @@ class WindowAttentionLayer(eqx.Module, strict=True):
         # Add relative position bias
         # TODO: Look up shape broadcasting rules.
         # Do we need the product of window width and height to equal the sequence length?
-        assert N == self.window_length * self.window_length, f"Expected N to be {self.window_length ** 2}, got {N}"
+        assert N == self.window_length * self.window_length, f"Expected N to be {self.window_length**2}, got {N}"
         attn = attn + relative_position_bias
         assert_shape((self.heads, N, N), attn)
 

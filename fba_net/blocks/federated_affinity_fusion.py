@@ -37,17 +37,15 @@ class FAFBlock(eqx.Module, strict=True):
         self.temporal_attn1 = Conv2dLayer(in_channels=self.num_feats, out_channels=self.num_feats)
 
         # feature fusion, applied to features from each frame
-        self.feature_fusion: nn.Sequential = nn.Sequential(
-            [
-                Conv2dLayer(
-                    in_channels=self.num_feats * self.num_frames,
-                    out_channels=self.num_feats,
-                    padding=0,
-                    kernel_size=1,
-                ),
-                nn.Lambda(nn.PReLU(init_alpha=0.1)),
-            ]
-        )
+        self.feature_fusion: nn.Sequential = nn.Sequential([
+            Conv2dLayer(
+                in_channels=self.num_feats * self.num_frames,
+                out_channels=self.num_feats,
+                padding=0,
+                kernel_size=1,
+            ),
+            nn.Lambda(nn.PReLU(init_alpha=0.1)),
+        ])
 
         # Top of hour glass, which shrinks
         self.downsample0 = DownsampleFlattenLayer(in_channels=self.num_feats, out_channels=self.num_feats * 2)
@@ -101,9 +99,10 @@ class FAFBlock(eqx.Module, strict=True):
         )
         assert_shape((self.num_frames - 1, height, width, self.num_feats), guide_weights)
 
-        guided_aligned_features: Float[Array, "F H W NF"] = jnp.concatenate(
-            [aligned_features[0:1], aligned_features[1:] * guide_weights]
-        )
+        guided_aligned_features: Float[Array, "F H W NF"] = jnp.concatenate([
+            aligned_features[0:1],
+            aligned_features[1:] * guide_weights,
+        ])
         assert_shape((self.num_frames, height, width, self.num_feats), guided_aligned_features)
 
         return guided_aligned_features

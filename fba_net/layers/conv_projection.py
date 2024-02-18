@@ -47,12 +47,10 @@ class ConvProjectionLayer(eqx.Module, strict=True):
         for letter in "qkv":
             self.__setattr__(
                 f"to_{letter}",
-                nn.Sequential(
-                    [
-                        mk_sep_conv2d_layer(self.__getattribute__(f"{letter}_stride")),
-                        nn.Lambda(rearrange_fn),
-                    ]
-                ),
+                nn.Sequential([
+                    mk_sep_conv2d_layer(self.__getattribute__(f"{letter}_stride")),
+                    nn.Lambda(rearrange_fn),
+                ]),
             )
 
     # Originally took `attn_kv` as an argument, but it's not used anywhere in the codebase

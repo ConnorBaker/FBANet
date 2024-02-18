@@ -87,12 +87,10 @@ class FBANetModel(eqx.Module, strict=True):
         self.fusion = FAFBlock(num_feats=self.embed_dim, num_frames=self.num_frames)
         self.head = Conv2dLayer(in_channels=self.in_channels, out_channels=self.embed_dim)
         self.body = nn.Sequential([nn.Lambda(ResBlock(num_feats=self.embed_dim)) for _ in range(2)])
-        self.tail = nn.Sequential(
-            [
-                UpsamplerBlock(scale_pow_two=1, num_feats=self.embed_dim),
-                Conv2dLayer(in_channels=self.embed_dim, out_channels=self.in_channels),
-            ]
-        )
+        self.tail = nn.Sequential([
+            UpsamplerBlock(scale_pow_two=1, num_feats=self.embed_dim),
+            Conv2dLayer(in_channels=self.embed_dim, out_channels=self.in_channels),
+        ])
 
         # stochastic depth for encoding, convolutional, and decoding layers
         enc_dpr: list[float] = jnp.linspace(

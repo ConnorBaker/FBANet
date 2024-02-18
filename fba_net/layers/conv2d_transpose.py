@@ -13,19 +13,17 @@ def ConvTranspose2dLayer(
     kernel_size: int = 2,
     stride: int = 2,
 ) -> nn.Sequential:
-    return nn.Sequential(
-        [
-            # Transpose so that channels are third from the end.
-            nn.Lambda(swap_channels_last_to_third_from_last),
-            # Convolution
-            nn.ConvTranspose2d(
-                in_channels=in_channels,
-                out_channels=out_channels,
-                kernel_size=kernel_size,
-                stride=stride,
-                key=next(KEYS),
-            ),
-            # Swap back
-            nn.Lambda(swap_channels_last_to_third_from_last),
-        ]
-    )
+    return nn.Sequential([
+        # Transpose so that channels are third from the end.
+        nn.Lambda(swap_channels_last_to_third_from_last),
+        # Convolution
+        nn.ConvTranspose2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            key=next(KEYS),
+        ),
+        # Swap back
+        nn.Lambda(swap_channels_last_to_third_from_last),
+    ])

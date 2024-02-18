@@ -35,6 +35,9 @@ type = ["beartype", "typing-extensions"]
 
 [tool.ruff]
 preview = true
+line-length = 120
+
+[tool.ruff.lint]
 select = ["F", "E", "W", "I", "PL", "FURB", "LOG", "RUF", "G", "TID"]
 ignore = [
     # Ignore functions with many arguments (I like currying)
@@ -42,7 +45,6 @@ ignore = [
     # Ignore syntax error in forward annotation for jaxtyping
     "F722",
 ]
-line-length = 120
 
 [tool.pyright]
 include = ["./fba_net"]

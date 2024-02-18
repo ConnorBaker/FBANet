@@ -6,13 +6,52 @@
 # Towards Real-World Burst Image Super-Resolution: Benchmark and Method 
 This is the official implementation of ICCV2023 "Towards Real-World Burst Image Super-Resolution: Benchmark and Method".
 
-Here is the [[baidu link]](https://pan.baidu.com/s/1xVsCXPDK8bLTHZJNr_ygWQ?pwd=1m2e) of the proposed RealBSR dataset. Google link and the project page are comming soon!
-
 ![Details](figs/realbsr_eg.png)
-<hr>
-<i> In short, we propose a new real-world dataset named RealBSR for real-world burst super-resolution, and also propose a corresponding network to fully explore the details provided by sub-pixel information.
 
-![Overview](figs/Framework.png)
+Here is the [[baidu link]](https://pan.baidu.com/s/1xVsCXPDK8bLTHZJNr_ygWQ?pwd=1m2e) (include Cropped RealBSR-RGB), the [[baidu link]](https://pan.baidu.com/s/1ak1pWL8vnym6txisxksgdg?pwd=mr3m) (include Full-size RealBSR-RGB) and the [[google drive link]](https://drive.google.com/drive/folders/1d4FOmRs0cKxWLPCsH-x7apVfsRJMKSJ4?usp=sharing) (include Cropped RealBSR-RGB and Cropped RealBSR-RAW) of the proposed RealBSR dataset. **(Please read the folder structure below before using them)**
+
+## Folder Structure of Data in Baidu Link of Cropped RealBSR-RGB
+
+```txt
+RealBSR Dataset
+├── train
+├──── LR (original LR. Need to run homography_alignment.py to align them.)
+├──── LR_aligned (Aligned LR using homography. You can use the aligned data directly as inputs of network)
+├──── GT (Corresponding HR)
+├── test
+├──── LR (original LR. Need to run homography_alignment.py to align them.)
+├──── LR_aligned (Aligned LR using homography. You can use the aligned data directly as inputs of network)
+├──── GT (Corresponding HR)
+```
+
+## Folder Structure of Data in Baidu Link of Full-Size RealBSR-RGB
+
+```txt
+RealBSR Dataset
+├── train
+├──── LR (original LR. Need to run homography_alignment.py to align them.)
+├──── rewarp.png (GT)
+├── test
+├──── LR (original LR. Need to run homography_alignment.py to align them.)
+├──── rewarp.png (GT)
+```
+
+## Folder Structure Of Data in Google Drive Link of Cropped RGB and RAW
+```txt
+RealBSR Dataset
+├── RGB
+├──── train
+├────── LR_aligned.zip (Aligned LR using homography. You can use the aligned data directly as inputs)
+├────── trainpatch.zip (Each group contains 14 original LR + 1 HR named xxxrewarp.png. If you want to use the LR data here, you need to run homography_alignment.py before regarding them as inputs of our network)
+├──── test
+├────── LR_aligned.zip (Aligned LR using homography. You can use the aligned data directly as inputs)
+├────── testpatch.zip (Each group contains 14 original LR + 1 HR named xxxrewarp.png. If you want to use the LR data here, you need to run homography_alignment.py before regarding them as inputs of our network)
+
+├── RAW
+├──── trainpatch.zip (Each group contains 14 original LR RAW + 1 HR named xxx_rgb.png + 1 pkl named xxx.pkl. The raw LR need to be aligned first by simply changing the homography_alignment for 4 channels. )
+├──── testpatch.zip (Each group contains 14 original LR RAW + 1 HR named xxx_rgb.png + 1 pkl named xxx.pkl. The raw LR need to be aligned first by simply changing the homography_alignment for 4 channels. )
+
+```
 
 ## Package dependencies
 The project is built with PyTorch 1.10.1, Python3.9, CUDA10.1. For package dependencies, you can install them by:
@@ -22,7 +61,7 @@ pip3 install -r requirements.txt
 
 ## Pretrained model
 
-- Checkpoint of FBANet on RealBSR dataset [[Google Drive]](https://drive.google.com/file/d/1Gc-xp_MAi6_rLTfEAT9N50ERgbfz3b4A/view?usp=drive_link).
+- Checkpoint of FBANet on RealBSR dataset [[Google Drive]](https://drive.google.com/file/d/1Gc-xp_MAi6_rLTfEAT9N50ERgbfz3b4A/view?usp=drive_link) and [[Baidu Drive Link]](https://pan.baidu.com/s/1y0OSXD9ExMj4mQ8Sj0VpoA?pwd=f9ew)
 
 |               Model                |  PSNR  | SSIM  | LPIPS |
 |:----------------------------------:|:------:|:-----:|:-----:|
@@ -58,4 +97,7 @@ To train BaseModel on RealBSR, we use 2 V100 GPUs and run for 200 epochs:
 ```python
 python3 ./train.py --arch BaseModel --batch_size 16 --gpu '0,1' --train_ps 160 --env 64_0523_MotionMFSR_FAF --embed_dim 64 --warmup
 ```
+
+## Contact
+My email is yujingsun1999@gmail.com. Please feel free to contact me about anything related to the paper. And I'm also very glad to talk about any topic of Super-Resolution!
 
